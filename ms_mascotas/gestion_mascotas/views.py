@@ -2,9 +2,12 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import time
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.utils import dateparse, timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -172,6 +175,16 @@ def reports(request):
         if len(image_data_url) > 1_500_000:
             return JsonResponse({'detail': 'image_too_large'}, status=400)
 
+        if contact_phone:
+            if not re.fullmatch(r'^[+\d][\d\s\-().]{5,30}$', contact_phone):
+                return JsonResponse({'detail': 'invalid_contact_phone'}, status=400)
+
+        if contact_email:
+            try:
+                validate_email(contact_email)
+            except ValidationError:
+                return JsonResponse({'detail': 'invalid_contact_email'}, status=400)
+
         latitude = None
         longitude = None
         if latitude_raw is not None or longitude_raw is not None:
@@ -247,14 +260,16 @@ def report_detail(request, report_id: int):
     except (TypeError, ValueError):
         is_owner = False
     is_admin = _is_admin(payload)
-    if not (is_admin or is_owner):
-        return JsonResponse({'detail': 'forbidden'}, status=403)
 
     if request.method in ['PATCH', 'PUT']:
         try:
             body = _read_json(request)
         except json.JSONDecodeError:
             return JsonResponse({'detail': 'invalid_json'}, status=400)
+
+        only_marking_found = set(body.keys()) == {'status'} and _normalize_status(body.get('status')) == 'encontrado'
+        if not only_marking_found and not (is_admin or is_owner):
+            return JsonResponse({'detail': 'forbidden'}, status=403)
 
         had_changes = False
         for field in [

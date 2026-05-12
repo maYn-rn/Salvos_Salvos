@@ -289,10 +289,11 @@ function formatDateShort(iso) {
   return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short' }).format(d)
 }
 
-function RecentReportsCarousel({ title, reports }) {
+function RecentReportsCarousel({ title, reports, onMarkFound }) {
   const trackRef = useRef(null)
   const [detailsById, setDetailsById] = useState({})
   const [loadingById, setLoadingById] = useState({})
+  const [markingById, setMarkingById] = useState({})
   const detailsRef = useRef({})
   const loadingRef = useRef({})
   const fetchTokenRef = useRef(0)
@@ -399,6 +400,21 @@ function RecentReportsCarousel({ title, reports }) {
                 <div className="carouselCardMeta">A {Number(r.distance_km).toFixed(1)} km</div>
               ) : null}
               {r.description ? <div className="carouselCardDesc">{r.description}</div> : null}
+              {r.status === 'perdido' ? (
+                <button
+                  className="primaryBtn"
+                  style={{ width: '100%', marginTop: '12px' }}
+                  type="button"
+                  disabled={markingById[r.id]}
+                  onClick={() => onMarkFound?.(r.id)}
+                >
+                  {markingById[r.id] ? 'Marcando...' : 'Reportar como encontrado'}
+                </button>
+              ) : (
+                <div className="carouselCardMeta" style={{ marginTop: '12px', fontWeight: 'bold', color: '#19a6b6' }}>
+                  ✓ Encontrado
+                </div>
+              )}
             </div>
           ))
         )}
@@ -1382,6 +1398,16 @@ function App() {
     e.preventDefault()
     setBusy(true)
     setError('')
+
+    if (authMode === 'register') {
+      const email = (authForm.email || '').trim()
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setError('Ingresa un email válido que incluya @ y un dominio')
+        setBusy(false)
+        return
+      }
+    }
+
     try {
       const path = authMode === 'register' ? '/api/auth/register/' : '/api/auth/login/'
       const body = authMode === 'register'
@@ -1413,6 +1439,24 @@ function App() {
       navigate('/', { replace: true })
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function markReportAsFound(reportId) {
+    if (!reportId) return
+    try {
+      const resp = await apiRequest(`/api/reports/${reportId}/`, {
+        method: 'PATCH',
+        body: { status: 'encontrado' },
+      })
+      if (!resp.ok) {
+        setError(resp.data?.detail || 'No se pudo marcar como encontrado')
+        return
+      }
+      setSuccess('Reporte marcado como encontrado. El administrador lo verificara.')
+      await loadReports()
+    } catch (err) {
+      setError(err?.message || 'Error al marcar como encontrado')
     }
   }
 
@@ -1451,6 +1495,20 @@ function App() {
       if (payload.latitude == null || payload.longitude == null) {
         setError('Selecciona una ubicación en el mapa')
         return
+      }
+
+      if (payload.contact_phone) {
+        if (!/^[+\d][\d\s\-().]{5,30}$/.test(payload.contact_phone)) {
+          setError('Ingresa un teléfono válido de contacto')
+          return
+        }
+      }
+
+      if (payload.contact_email) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.contact_email)) {
+          setError('Ingresa un email válido de contacto')
+          return
+        }
       }
 
       const resp = await apiRequest('/api/reports/', { method: 'POST', body: payload })
@@ -1521,7 +1579,7 @@ function App() {
                     </div>
                   </section>
                 </div>
-                <RecentReportsCarousel title="Reportes recientes cerca de ti" reports={nearbyRecentReports} />
+                <RecentReportsCarousel title="Reportes recientes cerca de ti" reports={nearbyRecentReports} onMarkFound={markReportAsFound} />
 
                 <section id="sobre-nosotros" className="section" />
               </div>
@@ -1633,6 +1691,7 @@ function App() {
                     <label className="field">
                       <span>Email</span>
                       <input
+                        type="email"
                         value={authForm.email}
                         onChange={(e) => setAuthForm((s) => ({ ...s, email: e.target.value }))}
                         autoComplete="email"
@@ -1734,6 +1793,7 @@ function App() {
                         <label className="field">
                           <span>Contacto (teléfono)</span>
                           <input
+                            type="tel"
                             value={reportForm.contact_phone}
                             onChange={(e) => setReportForm((s) => ({ ...s, contact_phone: e.target.value }))}
                           />
@@ -1741,6 +1801,7 @@ function App() {
                         <label className="field">
                           <span>Contacto (email)</span>
                           <input
+                            type="email"
                             value={reportForm.contact_email}
                             onChange={(e) => setReportForm((s) => ({ ...s, contact_email: e.target.value }))}
                           />

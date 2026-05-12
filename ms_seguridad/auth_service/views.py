@@ -8,6 +8,8 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.db import IntegrityError
 from django.utils import timezone
@@ -132,6 +134,14 @@ def register(request):
 
     if not username or not password:
         return JsonResponse({'detail': 'username_and_password_required'}, status=400)
+
+    if not email:
+        return JsonResponse({'detail': 'email_required'}, status=400)
+
+    try:
+        validate_email(email)
+    except ValidationError:
+        return JsonResponse({'detail': 'invalid_email'}, status=400)
 
     User = get_user_model()
     try:
