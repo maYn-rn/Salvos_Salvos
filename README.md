@@ -34,21 +34,25 @@ Para levantar el sistema completo, se deben iniciar los servicios en el siguient
 1.  **Microservicio de Seguridad (Puerto 8002):**
     ```bash
     cd ms_seguridad
+    py manage.py migrate
     python manage.py runserver 8002
     ```
 2.  **Microservicio de Mascotas (Puerto 8001):**
     ```bash
     cd ms_mascotas
+    py manage.py migrate
     python manage.py runserver 8001
     ```
 3.  **BFF / Gateway (Puerto 8000):**
     ```bash
     cd bff_web
+    py manage.py migrate
     python manage.py runserver 8000
     ```
 4.  **Frontend:**
     ```bash
     cd frontend
+    npm install 
     npm run dev
     ```
 
