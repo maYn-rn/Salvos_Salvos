@@ -47,7 +47,7 @@ Para levantar el sistema completo, se deben iniciar los servicios en el siguient
     ```bash
     cd bff_web
     py manage.py migrate
-    python manage.py runserver 8000
+    python manage.py runserver 8080
     ```
 4.  **Frontend:**
     ```bash
