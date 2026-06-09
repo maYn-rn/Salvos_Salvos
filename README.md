@@ -34,25 +34,46 @@ Para levantar el sistema completo, se deben iniciar los servicios en el siguient
 1.  **Microservicio de Seguridad (Puerto 8002):**
     ```bash
     cd ms_seguridad
+<<<<<<< HEAD
     python manage.py migrate
+=======
+    py manage.py migrate
+>>>>>>> c98e161739be9933ef8258ed3b476984a7050b6c
     python manage.py runserver 8002
     ```
 2.  **Microservicio de Mascotas (Puerto 8001):**
     ```bash
     cd ms_mascotas
+<<<<<<< HEAD
     python manage.py migrate
+=======
+    py manage.py migrate
+>>>>>>> c98e161739be9933ef8258ed3b476984a7050b6c
     python manage.py runserver 8001
     ```
 3.  **BFF / Gateway (Puerto 8000):**
     ```bash
     cd bff_web
+<<<<<<< HEAD
     python manage.py migrate
     python manage.py runserver 8000
+=======
+    py manage.py migrate
+    python manage.py runserver 8080
+>>>>>>> c98e161739be9933ef8258ed3b476984a7050b6c
     ```
 4.  **Frontend:**
     ```bash
     cd frontend
     npm install
+<<<<<<< HEAD
+=======
+
+    nvm use 20
+    nvm install 20.20.2
+    nvm use 20.20.2
+    node -v
+>>>>>>> c98e161739be9933ef8258ed3b476984a7050b6c
     npm run dev
     ```
 
@@ -61,4 +82,8 @@ Para levantar el sistema completo, se deben iniciar los servicios en el siguient
 Para acceder al panel de administración en el frontend, es necesario crear un superusuario en el servicio de seguridad:
 ```bash
 cd ms_seguridad
+<<<<<<< HEAD
 python manage.py createsuperuser
+=======
+python manage.py createsuperuser
+>>>>>>> c98e161739be9933ef8258ed3b476984a7050b6c
