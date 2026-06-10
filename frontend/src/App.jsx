@@ -11,56 +11,14 @@ const REGION_COMUNAS = [
   {
     region: 'Región Metropolitana de Santiago',
     comunas: [
-      'Santiago',
-      'Providencia',
-      'Las Condes',
-      'Ñuñoa',
-      'La Florida',
-      'Maipú',
-      'Puente Alto',
-      'San Miguel',
-      'Estación Central',
-      'La Reina',
-      'Peñalolén',
-      'Recoleta',
-      'Independencia',
-      'Quilicura',
-      'Renca',
-      'Conchalí',
-      'Lo Prado',
-      'Cerro Navia',
-      'Pudahuel',
-      'Huechuraba',
-      'Vitacura',
-      'San Joaquín',
-      'Macul',
-      'Lo Barnechea',
-      'La Cisterna',
-      'El Bosque',
-      'San Ramón',
-      'Pedro Aguirre Cerda',
-      'La Pintana',
-      'Lo Espejo',
-      'Cerrillos',
-      'San Bernardo',
-      'Peñaflor',
-      'Padre Hurtado',
-      'Talagante',
-      'El Monte',
-      'Buin',
-      'Paine',
-      'Colina',
-      'Lampa',
-      'Tiltil',
-      'Isla de Maipo',
-      'Calera de Tango',
-      'Pirque',
-      'San José de Maipo',
-      'Melipilla',
-      'Curacaví',
-      'María Pinto',
-      'Alhué',
-      'San Pedro',
+      'Santiago', 'Providencia', 'Las Condes', 'Ñuñoa', 'La Florida', 'Maipú', 'Puente Alto',
+      'San Miguel', 'Estación Central', 'La Reina', 'Peñalolén', 'Recoleta', 'Independencia',
+      'Quilicura', 'Renca', 'Conchalí', 'Lo Prado', 'Cerro Navia', 'Pudahuel', 'Huechuraba',
+      'Vitacura', 'San Joaquín', 'Macul', 'Lo Barnechea', 'La Cisterna', 'El Bosque', 'San Ramón',
+      'Pedro Aguirre Cerda', 'La Pintana', 'Lo Espejo', 'Cerrillos', 'San Bernardo', 'Peñaflor',
+      'Padre Hurtado', 'Talagante', 'El Monte', 'Buin', 'Paine', 'Colina', 'Lampa', 'Tiltil',
+      'Isla de Maipo', 'Calera de Tango', 'Pirque', 'San José de Maipo', 'Melipilla', 'Curacaví',
+      'María Pinto', 'Alhué', 'San Pedro',
     ],
   },
   { region: 'Región de Valparaíso', comunas: ['Valparaíso', 'Viña del Mar', 'Quilpué', 'Villa Alemana', 'Quillota', 'San Antonio', 'Otra'] },
@@ -160,13 +118,9 @@ async function apiRequest(path, { method = 'GET', body } = {}) {
 }
 
 async function refreshAccess() {
-  // 1. Recuperamos el refresh token guardado
   const refreshToken = localStorage.getItem('refresh_token');
-
-  // 2. Si no hay token, no intentamos el refresh
   if (!refreshToken) return false;
 
-  // 3. Enviamos el token en el body y agregamos el slash final
   const resp = await apiRequest('/api/auth/refresh/', { 
     method: 'POST', 
     body: { refresh: refreshToken } 
@@ -289,7 +243,7 @@ function formatDateShort(iso) {
   return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short' }).format(d)
 }
 
-function RecentReportsCarousel({ title, reports, onMarkFound }) {
+function RecentReportsCarousel({ title, reports, onMarkFound, onCardClick }) {
   const trackRef = useRef(null)
   const [detailsById, setDetailsById] = useState({})
   const [loadingById, setLoadingById] = useState({})
@@ -377,7 +331,16 @@ function RecentReportsCarousel({ title, reports, onMarkFound }) {
           <div className="carouselEmpty">Sin reportes recientes</div>
         ) : (
           (reports || []).map((r) => (
-            <div key={r.id} className="carouselCard">
+            <div 
+              key={r.id} 
+              className="carouselCard"
+              onClick={(e) => {
+                if (e.target.tagName !== 'BUTTON') {
+                  onCardClick?.(r.id)
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <div className="carouselImgWrap">
                 {detailsById[r.id]?.image_data_url ? (
                   <img className="carouselImg" src={detailsById[r.id].image_data_url} alt={r.pet_name || 'Mascota'} />
@@ -406,7 +369,10 @@ function RecentReportsCarousel({ title, reports, onMarkFound }) {
                   style={{ width: '100%', marginTop: '12px' }}
                   type="button"
                   disabled={markingById[r.id]}
-                  onClick={() => onMarkFound?.(r.id)}
+                  onClick={(e) => {
+                    e.stopPropagation(); 
+                    onMarkFound?.(r.id);
+                  }}
                 >
                   {markingById[r.id] ? 'Marcando...' : 'Reportar como encontrado'}
                 </button>
@@ -503,7 +469,6 @@ function AdminDashboardPage() {
   }
 
   async function confirmReport(id) {
-    // Agregamos el slash / después del ${id}
     const resp = await apiRequest(`/api/reports/${id}/`, { method: 'PATCH', body: { is_confirmed: true } })
     if (!resp.ok) throw new Error(resp.data?.detail || 'No se pudo confirmar')
     await loadAll()
@@ -822,7 +787,6 @@ function AdminReportsPage({ search }) {
   }
 
   async function confirmReport(id) {
-    // 1. Agregamos el slash /
     const resp = await apiRequest(`/api/reports/${id}/`, { method: 'PATCH', body: { is_confirmed: true } })
     if (!resp.ok) throw new Error(resp.data?.detail || 'No se pudo confirmar')
     await loadReports() 
@@ -1256,6 +1220,9 @@ function PublicLayout({ user, isAdmin, busy, onLogout, year }) {
 function App() {
   const year = new Date().getFullYear()
   const fallbackCenter = useMemo(() => [-33.4489, -70.6693], [])
+  const [selectedReportId, setSelectedReportId] = useState(null)
+  const [detailedReport, setDetailedReport] = useState(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
   const [userLocation, setUserLocation] = useState(null)
   const [user, setUser] = useState(null)
   const [authMode, setAuthMode] = useState('login')
@@ -1318,6 +1285,27 @@ function App() {
     const resp = await apiRequest('/api/reports/', { method: 'GET' })
     if (resp.ok && resp.data?.results) {
       setReports(resp.data.results)
+    }
+  }
+
+  // Función asíncrona encargada de consultar al BFF el JSON de la mascota
+  async function handleViewDetail(id) {
+    if (!id) return
+    setSelectedReportId(id)
+    setLoadingDetail(true)
+    setError('')
+    
+    try {
+      const resp = await apiRequest(`/api/reports/${id}/`, { method: 'GET' })
+      if (resp.ok && resp.data) {
+        setDetailedReport(resp.data)
+      } else {
+        setError('No se pudo cargar la información detallada de la mascota.')
+      }
+    } catch (err) {
+      setError('Error de comunicación con el servidor.')
+    } finally {
+      setLoadingDetail(false)
     }
   }
 
@@ -1497,16 +1485,34 @@ function App() {
         return
       }
 
+      // ==========================================
+      // BLOQUE DE VALIDACIÓN DE TELÉFONO ACTUALIZADO
+      // ==========================================
+      if (!payload.contact_phone) {
+        setError('El teléfono de contacto es obligatorio');
+        return;
+      }
+
+      if (!payload.contact_email) {
+        setError('El email de contacto es obligatorio');
+        return;
+      }
+
       if (payload.contact_phone) {
-        if (!/^[+\d][\d\s\-().]{5,30}$/.test(payload.contact_phone)) {
-          setError('Ingresa un teléfono válido de contacto')
-          return
+        // Limpiamos espacios y guiones para hacer la prueba solo con los números reales
+        const cleanPhone = payload.contact_phone.replace(/[\s\-]/g, '');
+        // Exigimos que tenga un +, seguido opcionalmente del código y entre 8 y 12 números máximo
+        if (!/^\+?[0-9]{8,12}$/.test(cleanPhone)) {
+          setError('Ingresa un teléfono válido de entre 8 y 12 números (ej: +56912345678)');
+          window.scrollTo(0, 0); // Sube la pantalla para que el usuario vea el error
+          return;
         }
       }
 
       if (payload.contact_email) {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.contact_email)) {
           setError('Ingresa un email válido de contacto')
+          window.scrollTo(0, 0);
           return
         }
       }
@@ -1522,7 +1528,7 @@ function App() {
         return
       }
 
-      setSuccess('Reporte enviado (pendiente de confirmación)')
+      setSuccess('Reporte enviado correctamente.')
       setLastCreatedReportId(resp.data?.id ?? null)
       await loadReports()
       setReportForm((s) => ({
@@ -1542,7 +1548,7 @@ function App() {
   return (
     <Routes>
       <Route
-        path="admin/*"
+        path="/admin/*"
         element={
           <div className="appShell">
             <main className="siteMain" role="main">
@@ -1552,34 +1558,130 @@ function App() {
         }
       />
 
-      <Route path="*" element={<PublicLayout user={user} isAdmin={isAdmin} busy={busy} onLogout={doLogout} year={year} />}>
+      <Route element={<PublicLayout user={user} isAdmin={isAdmin} busy={busy} onLogout={doLogout} year={year} />}>
+          
           <Route
-            index
+            path="/"
             element={
               <div className="mainInner mainInnerHome">
-                <div className="fullBleed">
-                  <section id="inicio" className="section">
-                    <div className="mapWrap mapFullBleed">
-                      <MapContainer className="map" center={center} zoom={zoom} scrollWheelZoom>
-                        <TileLayer
-                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        />
-                        <Recenter center={center} zoom={zoom} />
-                        <InvalidateSize watch={reports.length} />
-                        <ReportsMarkers reports={reports} highlightId={lastCreatedReportId} />
-                        {userLocation ? (
-                          <CircleMarker
-                            center={[userLocation.lat, userLocation.lng]}
-                            radius={6}
-                            pathOptions={{ color: '#064a55', fillColor: '#f4a340', fillOpacity: 1 }}
-                          />
-                        ) : null}
-                      </MapContainer>
+                {selectedReportId ? (
+                  
+                  <div className="mainInner">
+                    <button 
+                      className="miniBtn" 
+                      type="button" 
+                      onClick={() => { setSelectedReportId(null); setDetailedReport(null); setError(''); setSuccess(''); }}
+                      style={{ marginBottom: '20px' }}
+                    >
+                      ← Volver al mapa y reportes
+                    </button>
+
+                    {loadingDetail && <div className="mutedText" style={{marginTop: '20px'}}>Cargando ficha técnica...</div>}
+                    {error && <div className="formError" style={{marginTop: '20px'}}>{error}</div>}
+                    {success && <div className="formSuccess" style={{marginTop: '20px'}}>{success}</div>}
+
+                    {detailedReport && (
+                      <div className="reportGrid" style={{ marginTop: '20px' }}>
+                        
+                        <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8f9fa', padding: '24px' }}>
+                          {detailedReport.image_data_url ? (
+                            <img 
+                              src={detailedReport.image_data_url} 
+                              alt={detailedReport.pet_name} 
+                              style={{ width: '100%', height: 'auto', maxHeight: '500px', objectFit: 'contain', borderRadius: '8px' }} 
+                            />
+                          ) : (
+                            <div className="carouselImgPlaceholder" style={{ height: '300px', width: '100%', borderRadius: '12px' }}>🐾</div>
+                          )}
+                        </section>
+
+                        
+                        <section className="card" style={{ padding: '24px' }}>
+                          <h2 style={{ color: 'var(--teal-500)', fontSize: '2.5rem', marginBottom: '16px', marginTop: 0 }}>
+                            {detailedReport.pet_name || 'Mascota sin nombre'}
+                          </h2>
+                          <div style={{ marginBottom: '24px' }}>
+                            <span className="boPill" style={{ background: detailedReport.status === 'perdido' ? '#ffe8cc' : '#e6fcf5', color: detailedReport.status === 'perdido' ? '#f4a340' : '#19a6b6', padding: '8px 16px', borderRadius: '20px', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                              {detailedReport.status === 'perdido' ? '🔍 Buscado' : '✅ Encontrado'}
+                            </span>
+                          </div>
+
+                          <table className="adminTable" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px' }}>
+                            <tbody>
+                              <tr><td style={{ padding: '10px 8px' }}><strong>Especie:</strong></td><td style={{ padding: '10px 8px' }}>{detailedReport.species}</td></tr>
+                              <tr><td style={{ padding: '10px 8px' }}><strong>Región:</strong></td><td style={{ padding: '10px 8px' }}>{detailedReport.region}</td></tr>
+                              <tr><td style={{ padding: '10px 8px' }}><strong>Comuna:</strong></td><td style={{ padding: '10px 8px' }}>{detailedReport.comuna}</td></tr>
+                              <tr><td style={{ padding: '10px 8px' }}><strong>Descripción:</strong></td><td style={{ padding: '10px 8px' }}>{detailedReport.description || 'Sin descripción adicional.'}</td></tr>
+                              <tr><td style={{ padding: '10px 8px' }}><strong>Contacto:</strong></td><td style={{ padding: '10px 8px' }}>{detailedReport.contact_name || 'Anónimo'}</td></tr>
+                              <tr><td style={{ padding: '10px 8px' }}><strong>Teléfono:</strong></td><td style={{ padding: '10px 8px' }}>{detailedReport.contact_phone || 'No especificado'}</td></tr>
+                              <tr><td style={{ padding: '10px 8px' }}><strong>Email:</strong></td><td style={{ padding: '10px 8px' }}>{detailedReport.contact_email || 'No especificado'}</td></tr>
+                            </tbody>
+                          </table>
+
+                          <div style={{ marginTop: '30px' }}>
+                            {detailedReport.status === 'perdido' ? (
+                              <button
+                                className="primaryBtn"
+                                style={{ width: '100%', padding: '16px', fontSize: '1.2rem' }}
+                                type="button"
+                                disabled={busy}
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  if (!user) {
+                                    setError('Debes iniciar sesión para reportar a esta mascota como encontrada.');
+                                    window.scrollTo(0, 0);
+                                    return;
+                                  }
+                                  await markReportAsFound(detailedReport.id);
+                                  setDetailedReport(prev => ({ ...prev, status: 'encontrado' }));
+                                }}
+                              >
+                                ¡Reportar como encontrado!
+                              </button>
+                            ) : (
+                              <div style={{ background: '#e6fcf5', color: '#19a6b6', padding: '16px', textAlign: 'center', fontWeight: 'bold', borderRadius: '8px', fontSize: '1.1rem', border: '2px solid #20c997' }}>
+                                🎉 Esta mascota ya fue marcada como encontrada 🎉
+                              </div>
+                            )}
+                          </div>
+                        </section>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  
+                  <>
+                    <div className="fullBleed">
+                      <section id="inicio" className="section">
+                        <div className="mapWrap mapFullBleed">
+                          <MapContainer className="map" center={center} zoom={zoom} scrollWheelZoom>
+                            <TileLayer
+                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            <Recenter center={center} zoom={zoom} />
+                            <InvalidateSize watch={reports.length} />
+                            <ReportsMarkers reports={reports} highlightId={lastCreatedReportId} />
+                            {userLocation ? (
+                              <CircleMarker
+                                center={[userLocation.lat, userLocation.lng]}
+                                radius={6}
+                                pathOptions={{ color: '#064a55', fillColor: '#f4a340', fillOpacity: 1 }}
+                              />
+                            ) : null}
+                          </MapContainer>
+                        </div>
+                      </section>
                     </div>
-                  </section>
-                </div>
-                <RecentReportsCarousel title="Reportes recientes cerca de ti" reports={nearbyRecentReports} onMarkFound={markReportAsFound} />
+                    
+                    <RecentReportsCarousel 
+                      title="Reportes recientes cerca de ti" 
+                      reports={nearbyRecentReports} 
+                      onMarkFound={markReportAsFound} 
+                      onCardClick={handleViewDetail}
+                    />
+                  </>
+                )}
 
                 <section id="sobre-nosotros" className="section" />
               </div>
@@ -1587,136 +1689,14 @@ function App() {
           />
 
           <Route
-            path="politicas-de-privacidad"
+            path="/reportar"
             element={
               <div className="mainInner">
-                <section className="card">
-                  <h2 className="cardTitle">Políticas de privacidad</h2>
-                  <div className="mutedText">Contenido en construcción.</div>
-                </section>
-              </div>
-            }
-          />
+               
+                <div style={{ marginBottom: '16px' }}>
+                  <Link className="miniBtn" to="/">← Volver al inicio</Link>
+                </div>
 
-          <Route
-            path="terminos-y-condiciones"
-            element={
-              <div className="mainInner">
-                <section className="card">
-                  <h2 className="cardTitle">Términos y condiciones</h2>
-                  <div className="mutedText">Contenido en construcción.</div>
-                </section>
-              </div>
-            }
-          />
-
-          <Route
-            path="preguntas-frecuentes"
-            element={
-              <div className="mainInner">
-                <section className="card">
-                  <h2 className="cardTitle">Preguntas frecuentes</h2>
-                  <div className="mutedText">Contenido en construcción.</div>
-                </section>
-              </div>
-            }
-          />
-
-          <Route
-            path="login"
-            element={
-              <div className="mainInner">
-                <section className="card authCard">
-                  <h2 className="cardTitle">Iniciar sesión</h2>
-                  {error ? <div className="formError">{error}</div> : null}
-                  <form className="form" onSubmit={submitAuth}>
-                    <label className="field">
-                      <span>Usuario</span>
-                      <input
-                        value={authForm.username}
-                        onChange={(e) => setAuthForm((s) => ({ ...s, username: e.target.value }))}
-                        autoComplete="username"
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Contraseña</span>
-                      <input
-                        type="password"
-                        value={authForm.password}
-                        onChange={(e) => setAuthForm((s) => ({ ...s, password: e.target.value }))}
-                        autoComplete="current-password"
-                      />
-                    </label>
-                    <button className="primaryBtn" type="submit" disabled={busy}>Entrar</button>
-                  </form>
-                  <div className="mutedText">
-                    ¿No tienes cuenta?{' '}
-                    <Link
-                      to={`/register${location.search || ''}`}
-                      onClick={() => setAuthMode('register')}
-                    >
-                      Regístrate
-                    </Link>
-                  </div>
-                </section>
-              </div>
-            }
-          />
-
-          <Route
-            path="register"
-            element={
-              <div className="mainInner">
-                <section className="card authCard">
-                  <h2 className="cardTitle">Registro</h2>
-                  {error ? <div className="formError">{error}</div> : null}
-                  <form className="form" onSubmit={submitAuth}>
-                    <label className="field">
-                      <span>Usuario</span>
-                      <input
-                        value={authForm.username}
-                        onChange={(e) => setAuthForm((s) => ({ ...s, username: e.target.value }))}
-                        autoComplete="username"
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Contraseña</span>
-                      <input
-                        type="password"
-                        value={authForm.password}
-                        onChange={(e) => setAuthForm((s) => ({ ...s, password: e.target.value }))}
-                        autoComplete="new-password"
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Email</span>
-                      <input
-                        type="email"
-                        value={authForm.email}
-                        onChange={(e) => setAuthForm((s) => ({ ...s, email: e.target.value }))}
-                        autoComplete="email"
-                      />
-                    </label>
-                    <button className="primaryBtn" type="submit" disabled={busy}>Crear cuenta</button>
-                  </form>
-                  <div className="mutedText">
-                    ¿Ya tienes cuenta?{' '}
-                    <Link
-                      to={`/login${location.search || ''}`}
-                      onClick={() => setAuthMode('login')}
-                    >
-                      Inicia sesión
-                    </Link>
-                  </div>
-                </section>
-              </div>
-            }
-          />
-
-          <Route
-            path="reportar"
-            element={
-              <div className="mainInner">
                 {!user ? (
                   <section className="card authCard">
                     <h2 className="cardTitle">Inicia sesión para reportar</h2>
@@ -1729,94 +1709,114 @@ function App() {
                     <section className="card reportFormCard">
                       <h2 className="cardTitle">Reportar mascota perdida</h2>
                       {error ? <div className="formError">{error}</div> : null}
-                      {success ? <div className="formSuccess">{success}</div> : null}
-                      <form className="form" onSubmit={submitReport}>
-                        <label className="field">
-                          <span>Nombre *</span>
-                          <input
-                            value={reportForm.pet_name}
-                            onChange={(e) => setReportForm((s) => ({ ...s, pet_name: e.target.value }))}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Especie</span>
-                          <select
-                            value={reportForm.species}
-                            onChange={(e) => setReportForm((s) => ({ ...s, species: e.target.value }))}
-                          >
-                            <option value="">Selecciona…</option>
-                            {SPECIES_OPTIONS.map((s) => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="field">
-                          <span>Región</span>
-                          <select
-                            value={reportForm.region}
-                            onChange={(e) => onSelectRegion(e.target.value)}
-                          >
-                            <option value="">Selecciona…</option>
-                            {REGION_COMUNAS.map((r) => (
-                              <option key={r.region} value={r.region}>{r.region}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="field">
-                          <span>Comuna</span>
-                          <select
-                            value={reportForm.comuna}
-                            onChange={(e) => setReportForm((s) => ({ ...s, comuna: e.target.value }))}
-                            disabled={!reportForm.region}
-                          >
-                            <option value="">{reportForm.region ? 'Selecciona…' : 'Elige región primero'}</option>
-                            {getComunasForRegion(reportForm.region).map((c) => (
-                              <option key={c} value={c}>{c}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="field">
-                          <span>Imagen *</span>
-                          <input type="file" accept="image/*" onChange={onImageChange} required />
-                          {reportForm.image_file_name ? (
-                            <span className="fileHint">Seleccionada: {reportForm.image_file_name}</span>
-                          ) : null}
-                        </label>
-                        <label className="field">
-                          <span>Descripción</span>
-                          <input
-                            value={reportForm.description}
-                            onChange={(e) => setReportForm((s) => ({ ...s, description: e.target.value }))}
-                            placeholder="Se perdió cerca de…"
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Contacto (teléfono)</span>
-                          <input
-                            type="tel"
-                            value={reportForm.contact_phone}
-                            onChange={(e) => setReportForm((s) => ({ ...s, contact_phone: e.target.value }))}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Contacto (email)</span>
-                          <input
-                            type="email"
-                            value={reportForm.contact_email}
-                            onChange={(e) => setReportForm((s) => ({ ...s, contact_email: e.target.value }))}
-                          />
-                        </label>
-
-                        <div className="mutedText">
-                          Ubicación: {reportForm.latitude != null && reportForm.longitude != null
-                            ? `${reportForm.latitude.toFixed(6)}, ${reportForm.longitude.toFixed(6)}`
-                            : 'haz click en el mapa'}
+                      
+                      
+                      {success ? (
+                        <div className="formSuccess" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>🎉 {success}</div>
+                          <p>Tu reporte está guardado y será revisado por un administrador pronto.</p>
+                          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '10px' }}>
+                            <Link to="/" className="primaryBtn" style={{ textDecoration: 'none', textAlign: 'center', flex: 1 }}>
+                              ← Volver al mapa de inicio
+                            </Link>
+                            <button className="miniBtn" type="button" onClick={() => setSuccess('')} style={{ flex: 1 }}>
+                              Reportar otra mascota
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        <form className="form" onSubmit={submitReport}>
+                          <label className="field">
+                            <span>Nombre *</span>
+                            <input
+                              value={reportForm.pet_name}
+                              onChange={(e) => setReportForm((s) => ({ ...s, pet_name: e.target.value }))}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Especie</span>
+                            <select
+                              value={reportForm.species}
+                              onChange={(e) => setReportForm((s) => ({ ...s, species: e.target.value }))}
+                            >
+                              <option value="">Selecciona…</option>
+                              {SPECIES_OPTIONS.map((s) => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Región</span>
+                            <select
+                              value={reportForm.region}
+                              onChange={(e) => onSelectRegion(e.target.value)}
+                            >
+                              <option value="">Selecciona…</option>
+                              {REGION_COMUNAS.map((r) => (
+                                <option key={r.region} value={r.region}>{r.region}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Comuna</span>
+                            <select
+                              value={reportForm.comuna}
+                              onChange={(e) => setReportForm((s) => ({ ...s, comuna: e.target.value }))}
+                              disabled={!reportForm.region}
+                            >
+                              <option value="">{reportForm.region ? 'Selecciona…' : 'Elige región primero'}</option>
+                              {getComunasForRegion(reportForm.region).map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Imagen *</span>
+                            <input type="file" accept="image/*" onChange={onImageChange} required />
+                            {reportForm.image_file_name ? (
+                              <span className="fileHint">Seleccionada: {reportForm.image_file_name}</span>
+                            ) : null}
+                          </label>
+                          <label className="field">
+                            <span>Descripción</span>
+                            <input
+                              value={reportForm.description}
+                              onChange={(e) => setReportForm((s) => ({ ...s, description: e.target.value }))}
+                              placeholder="Se perdió cerca de…"
+                            />
+                          </label>
 
-                        <button className="primaryBtn" type="submit" disabled={busy}>
-                          Publicar reporte
-                        </button>
-                      </form>
+                          <label className="field">
+                            <span>Contacto (teléfono) *</span>
+                            <input
+                              type="tel"
+                              value={reportForm.contact_phone}
+                              onChange={(e) => setReportForm((s) => ({ ...s, contact_phone: e.target.value }))}
+                              placeholder="+56912345678"
+                              maxLength={12}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Contacto (email) *</span>
+                            <input
+                              type="email"
+                              value={reportForm.contact_email}
+                              onChange={(e) => setReportForm((s) => ({ ...s, contact_email: e.target.value }))}
+                              placeholder="correo@ejemplo.com"
+                            />
+                          </label>
+
+                          <div className="mutedText">
+                            Ubicación: {reportForm.latitude != null && reportForm.longitude != null
+                              ? `${reportForm.latitude.toFixed(6)}, ${reportForm.longitude.toFixed(6)}`
+                              : 'haz click en el mapa'}
+                          </div>
+
+                          <button className="primaryBtn" type="submit" disabled={busy}>
+                            Publicar reporte
+                          </button>
+                        </form>
+                      )}
                     </section>
 
                     <section className="card reportMapCard">
@@ -1854,6 +1854,65 @@ function App() {
               </div>
             }
           />
+
+          <Route path="/login" element={
+            <div className="mainInner">
+              <section className="card authCard">
+                <h2 className="cardTitle">Iniciar sesión</h2>
+                {error ? <div className="formError">{error}</div> : null}
+                <form className="form" onSubmit={submitAuth}>
+                  <label className="field">
+                    <span>Usuario</span>
+                    <input value={authForm.username} onChange={(e) => setAuthForm((s) => ({ ...s, username: e.target.value }))} autoComplete="username" />
+                  </label>
+                  <label className="field">
+                    <span>Contraseña</span>
+                    <input type="password" value={authForm.password} onChange={(e) => setAuthForm((s) => ({ ...s, password: e.target.value }))} autoComplete="current-password" />
+                  </label>
+                  <button className="primaryBtn" type="submit" disabled={busy}>Entrar</button>
+                </form>
+                <div className="mutedText">
+                  ¿No tienes cuenta? <Link to={`/register${location.search || ''}`} onClick={() => setAuthMode('register')}>Regístrate</Link>
+                </div>
+              </section>
+            </div>
+          } />
+
+          <Route path="/register" element={
+            <div className="mainInner">
+              <section className="card authCard">
+                <h2 className="cardTitle">Registro</h2>
+                {error ? <div className="formError">{error}</div> : null}
+                <form className="form" onSubmit={submitAuth}>
+                  <label className="field">
+                    <span>Usuario</span>
+                    <input value={authForm.username} onChange={(e) => setAuthForm((s) => ({ ...s, username: e.target.value }))} autoComplete="username" />
+                  </label>
+                  <label className="field">
+                    <span>Contraseña</span>
+                    <input type="password" value={authForm.password} onChange={(e) => setAuthForm((s) => ({ ...s, password: e.target.value }))} autoComplete="new-password" />
+                  </label>
+                  <label className="field">
+                    <span>Email</span>
+                    <input type="email" value={authForm.email} onChange={(e) => setAuthForm((s) => ({ ...s, email: e.target.value }))} autoComplete="email" />
+                  </label>
+                  <button className="primaryBtn" type="submit" disabled={busy}>Crear cuenta</button>
+                </form>
+                <div className="mutedText">
+                  ¿Ya tienes cuenta? <Link to={`/login${location.search || ''}`} onClick={() => setAuthMode('login')}>Inicia sesión</Link>
+                </div>
+              </section>
+            </div>
+          } />
+
+        
+          <Route path="/politicas-de-privacidad" element={<div className="mainInner"><section className="card"><h2 className="cardTitle">Políticas de privacidad</h2><div className="mutedText">Contenido en construcción.</div></section></div>} />
+          <Route path="/terminos-y-condiciones" element={<div className="mainInner"><section className="card"><h2 className="cardTitle">Términos y condiciones</h2><div className="mutedText">Contenido en construcción.</div></section></div>} />
+          <Route path="/preguntas-frecuentes" element={<div className="mainInner"><section className="card"><h2 className="cardTitle">Preguntas frecuentes</h2><div className="mutedText">Contenido en construcción.</div></section></div>} />
+
+          
+          <Route path="*" element={<Navigate to="/" replace />} />
+
       </Route>
     </Routes>
   )
