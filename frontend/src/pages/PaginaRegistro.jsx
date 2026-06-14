@@ -25,7 +25,7 @@ const validarRutChileno = (rutCompleto) => {
   const cuerpo = valor.slice(0, -1);
   const dvIngresado = valor.slice(-1);
 
-  // El cuerpo solo puede tener números, si tiene "K" en el cuerpo está malo (ej: kk.kkk.kkk-k)
+  // El cuerpo solo puede tener números, si tiene "K" en el cuerpo está malo
   if (!/^[0-9]+$/.test(cuerpo)) return false;
 
   // Calculamos el dígito verificador real usando Módulo 11
@@ -58,7 +58,7 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
       return;
     }
 
-    // 2. Validar RUT (ahora usa la fórmula matemática)
+    // 2. Validar RUT (usa la fórmula matemática)
     if (!validarRutChileno(authForm.rut)) {
       setLocalError('Por favor ingresa un RUT válido y real.');
       return;

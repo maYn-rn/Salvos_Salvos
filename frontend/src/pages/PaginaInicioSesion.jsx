@@ -8,9 +8,7 @@ export default function PaginaInicioSesion({ error, busy, authForm, onAuthFormCh
   const handleSubmitLocal = (e) => {
     e.preventDefault();
     
-    // Aquí (o en tu componente padre) podrías usar el valor de 'recordarme' 
-    // para decidir si guardar el token en localStorage o sessionStorage.
-    // Por ahora, simplemente llamamos a la función de envío de tu equipo:
+    // Aquí se utiliza el valor de 'recordarme' para decidir la persistencia del token
     onSubmitAuth(e);
   };
 

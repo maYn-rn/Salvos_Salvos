@@ -23,10 +23,7 @@ function App() {
   const [userLocation, setUserLocation] = useState(null)
   const [user, setUser] = useState(null)
   const [authMode, setAuthMode] = useState('login')
-  
-  // Aquí está el primer cambio: agregamos el RUT vacío al estado inicial
   const [authForm, setAuthForm] = useState({ username: '', password: '', email: '', rut: '' })
-  
   const [reports, setReports] = useState([])
   const [lastCreatedReportId, setLastCreatedReportId] = useState(null)
   const [reportForm, setReportForm] = useState({
@@ -229,10 +226,13 @@ function App() {
 
     try {
       const path = authMode === 'register' ? '/api/auth/register/' : '/api/auth/login/'
-      
-      // Aquí está el segundo cambio: Agregamos el rut al body de registro
       const body = authMode === 'register'
-        ? { username: authForm.username, password: authForm.password, email: authForm.email, rut: authForm.rut }
+        ? { 
+            username: authForm.username, 
+            password: authForm.password, 
+            email: authForm.email, 
+            rut: authForm.rut // <-- Aquí agregamos el RUT para enviarlo
+          }
         : { username: authForm.username, password: authForm.password }
 
       const resp = await apiRequest(path, { method: 'POST', body })
