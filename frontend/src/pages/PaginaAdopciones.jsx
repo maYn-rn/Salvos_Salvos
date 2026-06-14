@@ -160,7 +160,7 @@ export default function PaginaAdopciones({ user }) {
     }
   }
 
-  // Función para que el admin apruebe/desapruebe
+  
   async function handleToggleApprove(id, currentStatus) {
     setError('')
     setSuccess('')
@@ -263,9 +263,14 @@ export default function PaginaAdopciones({ user }) {
         setError('El nombre de contacto es obligatorio')
         return
       }
-      if (!payload.contact_phone && !payload.contact_email) {
-        setError('Ingresa telefono o email de contacto')
-        return
+      if (payload.contact_phone) {
+        const cleanPhone = payload.contact_phone.replace(/[\s-]/g, '')
+        
+        if (!/^\+?[0-9]{8,12}$/.test(cleanPhone)) {
+          setError('Ingresa un teléfono válido de entre 8 y 12 números (ej: +56912345678)')
+          window.scrollTo(0, 0)
+          return
+        }
       }
       if (payload.publisher_type === 'albergue' && !payload.shelter_name) {
         setError('Indica el nombre del albergue')
@@ -427,7 +432,7 @@ export default function PaginaAdopciones({ user }) {
 
             <label className="field">
               <span>Telefono</span>
-              <input value={form.contact_phone} onChange={(e) => updateForm({ contact_phone: e.target.value })} placeholder="Ej: +56912345678" />
+              <input type="tel" maxLength={15} value={form.contact_phone} onChange={(e) => updateForm({ contact_phone: e.target.value })} placeholder="Ej: +56912345678" />
             </label>
 
             <label className="field">

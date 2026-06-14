@@ -1,4 +1,3 @@
-
 :root {
   --teal-900: #064a55;
   --teal-700: #0f7687;
@@ -2047,22 +2046,66 @@ a {
   color: rgba(255, 255, 255, 0.75);
 }
 
-@media (max-width: 720px) {
+
+.mobileMenuBtn {
+  display: none;
+  background: transparent;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  color: #064a55;
+}
+
+
+@media (min-width: 1025px) {
+  .mobileTextOnly {
+    display: none;
+  }
+}
+
+
+@media (max-width: 1024px) {
+  /* 1. HEADER Y MENÚ HAMBURGUESA */
   .headerInner {
-    flex-wrap: wrap;
-    justify-content: center;
+    flex-wrap: wrap !important;
+    justify-content: space-between !important;
+    padding: 10px 16px !important;
   }
-  .siteNav {
+  .mobileMenuBtn {
+    display: block; 
+  }
+  .siteNavMobile {
+    display: none !important; 
+    width: 100%;
+    flex-direction: column;
+    order: 3;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    margin-top: 16px;
+    text-align: center;
+    gap: 15px;
+  }
+  .siteNavMobile.open {
+    display: flex !important;
+  }
+  .headerActionsMobile {
     display: none;
-  }
-  .brandName {
-    display: none;
-  }
-  .headerActions {
     width: 100%;
     justify-content: center;
-    margin-left: 0;
+    flex-wrap: wrap;
+    margin-top: 15px;
+    order: 4;
+    gap: 10px;
   }
+  .siteNavMobile.open + .headerActionsMobile {
+    display: flex; 
+  }
+  .mobileTextOnly {
+    display: inline-block;
+  }
+
+ 
   .homeHero {
     grid-template-columns: 1fr;
     padding-top: 18px;
@@ -2141,8 +2184,11 @@ a {
     border-top: none;
     padding-top: 0;
   }
+
+  /* 3. FORMULARIOS Y MAPAS (Página Reportar) */
   .reportGrid {
-    grid-template-columns: 1fr;
+    display: flex !important;
+    flex-direction: column !important;
   }
   .reportFormCard {
     position: static;
@@ -2150,26 +2196,42 @@ a {
   .reportMap {
     height: 520px;
   }
-  .footerGrid {
-    grid-template-columns: 1fr;
+
+  /* 4. DETALLE DE MASCOTA (Single) */
+  .singlePetDetail {
+    flex-direction: column !important;
   }
-  .adoptionsHero {
-    flex-direction: column;
-    align-items: flex-start;
+  .singlePetDetail > div {
+    flex-basis: auto !important;
+    width: 100% !important;
   }
+
+  /* 5. PÁGINA DE ADOPCIONES */
   .adoptionsLayout {
-    grid-template-columns: 1fr;
-  }
-  .adoptionsFiltersCard,
-  .adoptionsDetailCard {
-    position: static;
+    display: flex !important;
+    flex-direction: column !important;
   }
   .adoptionsFormGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+  }
+  .adoptionsHero {
+    flex-direction: column !important;
+    text-align: center;
   }
   .adoptionCardFooter {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  /* 6. PANEL DE ADMINISTRADOR */
+  .boGrid2 {
+    grid-template-columns: 1fr !important;
+  }
+  .boKpiGrid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .adminTableWrap {
+    overflow-x: auto;
   }
   .adminForm {
     grid-template-columns: 1fr;
@@ -2198,10 +2260,25 @@ a {
   .boTopbarRight {
     justify-content: space-between;
   }
-  .boKpiGrid {
-    grid-template-columns: 1fr 1fr;
+
+  /* 7. FOOTER (Pie de página) */
+  .footerGrid {
+    flex-direction: column !important;
+    align-items: center;
+    text-align: center;
+    gap: 30px;
   }
-  .boGrid2 {
-    grid-template-columns: 1fr;
+}
+
+
+@media (max-width: 480px) {
+  .boKpiGrid {
+    grid-template-columns: 1fr !important;
+  }
+  .brandName {
+    display: none; 
+  }
+  .headerInner {
+    padding: 10px !important;
   }
 }

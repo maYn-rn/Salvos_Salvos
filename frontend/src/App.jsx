@@ -12,6 +12,8 @@ import PaginaPreguntasFrecuentes from './pages/PaginaPreguntasFrecuentes'
 import PaginaPerfil from './pages/PaginaPerfil'
 import PaginaRegistro from './pages/PaginaRegistro'
 import PaginaReporte from './pages/PaginaReporte'
+// 1. IMPORTAMOS LA PÁGINA REAL DE VOLUNTARIOS
+import PaginaVoluntarios from './pages/PaginaVoluntarios' 
 import { apiRequest, haversineKm, refreshAccess, REGION_VIEW, setAccessToken } from './shared/appCore'
 
 function App() {
@@ -436,6 +438,10 @@ function App() {
 
         <Route path="/perfil" element={<PaginaPerfil user={user} reports={reports} onLogout={doLogout} busy={busy} onMarkFound={markReportAsFound} onViewDetail={handleViewDetail} />} />
         <Route path="/preguntas-frecuentes" element={<PaginaPreguntasFrecuentes user={user} isAdmin={isAdmin} />} />
+        
+        {/* 2. RUTA REAL DE VOLUNTARIOS CONECTADA AL COMPONENTE */}
+        <Route path="/voluntarios" element={<PaginaVoluntarios user={user} />} />
+        
         <Route
           path="/login"
           element={
@@ -464,10 +470,6 @@ function App() {
             />
           }
         />
-        
-        {/* === NUEVA RUTA DE VOLUNTARIOS AQUÍ === */}
-        <Route path="/voluntarios" element={<div className="mainInner"><section className="card"><h2 className="cardTitle">Voluntarios</h2><div className="mutedText">Página de voluntarios en construcción. ¡Pronto podrás unirte a nuestro equipo!</div></section></div>} />
-        
         <Route path="/politicas-de-privacidad" element={<div className="mainInner"><section className="card"><h2 className="cardTitle">Politicas de privacidad</h2><div className="mutedText">Contenido en construccion.</div></section></div>} />
         <Route path="/terminos-y-condiciones" element={<div className="mainInner"><section className="card"><h2 className="cardTitle">Terminos y condiciones</h2><div className="mutedText">Contenido en construccion.</div></section></div>} />
         <Route path="*" element={<Navigate to="/" replace />} />
