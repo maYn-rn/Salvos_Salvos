@@ -4,6 +4,7 @@ import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import PaginaAdminResumen from './PaginaAdminResumen'
 import PaginaAdminReportes from './PaginaAdminReportes'
 import PaginaAdminUsuarios from './PaginaAdminUsuarios'
+import PaginaAdminAdopciones from './PaginaAdminAdopciones' // ◄ Importamos la nueva página
 
 export default function PanelAdministracion({ user, onLogout, busy }) {
   const isAdmin = Boolean(user?.is_staff || user?.is_superuser)
@@ -23,10 +24,13 @@ export default function PanelAdministracion({ user, onLogout, busy }) {
 
   const path = location.pathname
   const active = (suffix) => (path === `/admin/${suffix}` ? ' isActive' : '')
+  
   const title =
     path.startsWith('/admin/reportes') ? 'Reportes' :
     path.startsWith('/admin/usuarios') ? 'Usuarios' :
+    path.startsWith('/admin/adopciones') ? 'Adopciones' : // ◄ Título dinámico para adopciones
     'Dashboard'
+    
   const initials = (user?.username || 'A').slice(0, 1).toUpperCase()
 
   return (
@@ -52,6 +56,13 @@ export default function PanelAdministracion({ user, onLogout, busy }) {
                 <svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M7 2h10a2 2 0 0 1 2 2v16l-4-2-4 2-4-2-4 2V4a2 2 0 0 1 2-2Zm2 5h6v2H9V7Zm0 4h6v2H9v-2Z"/></svg>
               </span>
               <span>Reportes</span>
+            </Link>
+            {/* NUEVO BOTÓN EN LA BARRA LATERAL DEL ADMIN */}
+            <Link className={`boNavLink${active('adopciones')}`} to="/admin/adopciones">
+              <span className="boNavIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35Z"/></svg>
+              </span>
+              <span>Adopciones</span>
             </Link>
             <Link className={`boNavLink${active('usuarios')}`} to="/admin/usuarios">
               <span className="boNavIcon" aria-hidden="true">
@@ -94,6 +105,8 @@ export default function PanelAdministracion({ user, onLogout, busy }) {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<PaginaAdminResumen />} />
             <Route path="reportes" element={<PaginaAdminReportes search={search} />} />
+            {/* NUEVA RUTA PARA RENDERIZAR EL COMPONENTE */}
+            <Route path="adopciones" element={<PaginaAdminAdopciones search={search} />} />
             <Route path="usuarios" element={<PaginaAdminUsuarios search={search} />} />
           </Routes>
         </div>

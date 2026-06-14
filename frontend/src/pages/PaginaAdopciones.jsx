@@ -98,8 +98,35 @@ export default function PaginaAdopciones({ user }) {
         setAdoptions([])
         return
       }
-      const results = Array.isArray(resp.data?.results) ? resp.data.results : []
-      setAdoptions(results)
+
+      let rawResults = []
+      if (Array.isArray(resp.data)) {
+        rawResults = resp.data
+      } else if (resp.data && Array.isArray(resp.data.results)) {
+        rawResults = resp.data.results
+      } else if (resp.data && typeof resp.data === 'object') {
+        rawResults = Object.values(resp.data).filter(item => typeof item === 'object' && item !== null)
+      }
+
+      // DETERMINAR SI EL USUARIO ES ADMIN
+      const isAdminUser = 
+        user?.is_staff === true || 
+        user?.is_superuser === true || 
+        user?.role === 'admin' || 
+        user?.role === 'staff'
+
+      let finalResults = []
+      if (isAdminUser) {
+        // Si es admin, ve absolutamente todo (pendientes y aprobados)
+        finalResults = rawResults
+      } else {
+        // Si es público general, solo ve lo confirmado o activo
+        finalResults = rawResults.filter(
+          (item) => item.is_confirmed === true || item.active === true
+        )
+      }
+
+      setAdoptions(finalResults)
     } catch (err) {
       setError(err?.message || 'Error al cargar adopciones')
       setAdoptions([])
@@ -110,7 +137,7 @@ export default function PaginaAdopciones({ user }) {
 
   useEffect(() => {
     loadAdoptions(filters)
-  }, [])
+  }, [user])
 
   async function loadAdoptionDetail(id) {
     if (!id) return
@@ -130,6 +157,28 @@ export default function PaginaAdopciones({ user }) {
       setSelectedAdoption(null)
     } finally {
       setLoadingDetail(false)
+    }
+  }
+
+  // Función para que el admin apruebe/desapruebe
+  async function handleToggleApprove(id, currentStatus) {
+    setError('')
+    setSuccess('')
+    try {
+      const resp = await apiRequest(`/api/adoptions/${id}/`, {
+        // Si tu backend no soporta PATCH, puedes cambiarlo por 'PUT'
+        method: 'PATCH', 
+        body: { is_confirmed: !currentStatus, active: !currentStatus }
+      })
+      if (resp.ok) {
+        setSuccess('Estado de aprobación actualizado con éxito')
+        loadAdoptions(filters)
+        loadAdoptionDetail(id)
+      } else {
+        setError(resp.data?.detail || 'No se pudo cambiar el estado de aprobación')
+      }
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -237,9 +286,6 @@ export default function PaginaAdopciones({ user }) {
       setForm(createEmptyForm(user))
       setFormOpen(false)
       await loadAdoptions(filters)
-      if (resp.data?.id) {
-        await loadAdoptionDetail(resp.data.id)
-      }
     } catch (err) {
       setError(err?.message || 'Error al publicar la adopcion')
     } finally {
@@ -250,11 +296,15 @@ export default function PaginaAdopciones({ user }) {
   const filterComunas = useMemo(() => getComunasForRegion(filters.region), [filters.region])
   const formComunas = useMemo(() => getComunasForRegion(form.region), [form.region])
 
+  const checkIsAdmin = user?.is_staff || user?.is_superuser || user?.role === 'admin' || user?.role === 'staff'
+
   return (
     <div className="mainInner">
       <section className="section card adoptionsHero">
         <div className="adoptionsHeroCopy">
-          <div className="homeHeroEyebrow">Adopciones responsables</div>
+          <div className="homeHeroEyebrow">
+            {checkIsAdmin ? 'Panel de Control de Adopciones (Modo Admin)' : 'Adopciones responsables'}
+          </div>
           <h1 className="sectionTitle adoptionsTitle">Encuentra una mascota que necesita un hogar</h1>
           <p className="sectionSubtitle adoptionsSubtitle">
             Explora publicaciones de personas y albergues conectadas al microservicio de adopciones.
@@ -479,9 +529,11 @@ export default function PaginaAdopciones({ user }) {
         <section className="adoptionsResults">
           <div className="card adoptionsResultsHeader">
             <div>
-              <div className="cardTitle" style={{ marginBottom: '4px' }}>Publicaciones activas</div>
+              <div className="cardTitle" style={{ marginBottom: '4px' }}>
+                {checkIsAdmin ? 'Todas las publicaciones (Admin)' : 'Publicaciones activas'}
+              </div>
               <div className="mutedText" style={{ marginTop: 0 }}>
-                {loadingList ? 'Cargando...' : `${adoptions.length} adopciones visibles`}
+                {loadingList ? 'Cargando...' : `${adoptions.length} registros cargados`}
               </div>
             </div>
           </div>
@@ -506,7 +558,14 @@ export default function PaginaAdopciones({ user }) {
                 >
                   <div className="adoptionCardTop">
                     <div>
-                      <div className="carouselCardTitle">{item.pet_name}</div>
+                      <div className="carouselCardTitle">
+                        {item.pet_name} 
+                        {checkIsAdmin && !item.is_confirmed && !item.active && (
+                          <span style={{ color: 'var(--error-color, #d32f2f)', fontSize: '0.8rem', marginLeft: '8px', fontWeight: 'bold' }}>
+                            [PENDIENTE]
+                          </span>
+                        )}
+                      </div>
                       <div className="carouselCardMeta">{item.species} • {item.comuna}, {item.region}</div>
                     </div>
                     <span className={`adoptionStatusPill status-${item.adoption_status}`}>{statusLabel(item.adoption_status)}</span>
@@ -529,7 +588,7 @@ export default function PaginaAdopciones({ user }) {
                 </article>
               ))
             ) : (
-              <div className="card mutedText">No hay publicaciones que coincidan con los filtros.</div>
+              <div className="card mutedText">No se encontraron adopciones en la base de datos.</div>
             )}
           </div>
         </section>
@@ -557,6 +616,21 @@ export default function PaginaAdopciones({ user }) {
                   <span className="boPill">{publisherLabel(selectedAdoption.publisher_type)}</span>
                 </div>
               </div>
+
+              {/* CONTROLES DE ADMINISTRADOR INTEGRADOS DE FORMA LIMPIA */}
+              {checkIsAdmin && (
+                <div style={{ background: '#f5f5f5', padding: '10px', borderRadius: '6px', margin: '12px 0', border: '1px solid #ddd' }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', fontWeight: 'bold', color: '#333' }}>Moderación de Publicación:</p>
+                  <button 
+                    type="button" 
+                    className="primaryBtn" 
+                    style={{ backgroundColor: selectedAdoption.is_confirmed ? '#d32f2f' : '#2e7d32', width: '100%', fontSize: '0.85rem', padding: '6px', color: '#fff', border: 'none', cursor: 'pointer', borderRadius: '4px' }}
+                    onClick={() => handleToggleApprove(selectedAdoption.id, selectedAdoption.is_confirmed)}
+                  >
+                    {selectedAdoption.is_confirmed ? 'Ocultar Publicación' : 'Aprobar Publicación'}
+                  </button>
+                </div>
+              )}
 
               <div className="adoptionDetailMeta">
                 <span>{selectedAdoption.species}</span>
