@@ -18,6 +18,9 @@ from django.contrib import admin
 from django.urls import path
 
 from .api_views import (
+    archivo_descargar_proxy,
+    archivo_detalle_proxy,
+    archivos_proxy,
     adoption_detail_proxy,
     adoptions_proxy,
     auth_login,
@@ -27,6 +30,8 @@ from .api_views import (
     auth_register,
     auth_users,
     report_detail_proxy,
+    report_found_lead_detail_proxy,
+    report_found_leads_proxy,
     reports_proxy,
 )
 
@@ -40,6 +45,11 @@ urlpatterns = [
     path('api/auth/users/', auth_users),
     path('api/reports/', reports_proxy),
     path('api/reports/<int:report_id>/', report_detail_proxy),
+    path('api/reports/<int:report_id>/found-leads/', report_found_leads_proxy),
+    path('api/reports/found-leads/<int:lead_id>/', report_found_lead_detail_proxy),
     path('api/adoptions/', adoptions_proxy),
     path('api/adoptions/<int:adoption_id>/', adoption_detail_proxy),
+    path('api/archivos/', archivos_proxy),
+    path('api/archivos/<int:archivo_id>/', archivo_detalle_proxy),
+    path('api/archivos/<int:archivo_id>/descargar/', archivo_descargar_proxy),
 ]

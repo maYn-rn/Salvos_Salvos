@@ -12,7 +12,7 @@ from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.utils import dateparse, timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import LostPetReport
+from .models import FoundPetLead, LostPetReport
 
 
 def _b64url_encode(raw: bytes) -> str:
@@ -81,7 +81,70 @@ def _normalize_status(value: str) -> str:
     return (value or '').strip()
 
 
+def _normalize_images(value) -> list[dict]:
+    if value in (None, ''):
+        return []
+    if not isinstance(value, list):
+        raise ValueError('invalid_images')
+
+    normalized = []
+    for index, item in enumerate(value[:3]):
+        if not isinstance(item, dict):
+            raise ValueError('invalid_images')
+
+        image_id = item.get('id')
+        if image_id in (None, ''):
+            image_id = None
+        else:
+            try:
+                image_id = int(image_id)
+            except (TypeError, ValueError):
+                raise ValueError('invalid_images')
+
+        image_url = (item.get('url_descarga') or item.get('url') or '').strip()
+        if not image_url:
+            raise ValueError('invalid_images')
+
+        category = (item.get('categoria') or ('principal' if index == 0 else 'galeria')).strip() or 'galeria'
+
+        try:
+            order = int(item.get('orden', index + 1))
+        except (TypeError, ValueError):
+            raise ValueError('invalid_images')
+        if order < 1:
+            raise ValueError('invalid_images')
+
+        normalized.append({
+            'id': image_id,
+            'url_descarga': image_url,
+            'categoria': category,
+            'orden': order,
+        })
+
+    normalized.sort(key=lambda image: (image.get('orden') or 0, image.get('id') or 0))
+    return normalized
+
+
+def _public_images(report: LostPetReport) -> list[dict]:
+    try:
+        images = _normalize_images(report.imagenes)
+    except ValueError:
+        images = []
+    if images:
+        return images
+    if report.image_data_url:
+        return [{
+            'id': None,
+            'url_descarga': report.image_data_url,
+            'categoria': 'principal',
+            'orden': 1,
+        }]
+    return []
+
+
 def _report_to_dict(report: LostPetReport, include_image: bool = False) -> dict:
+    images = _public_images(report)
+    cover_image = images[0]['url_descarga'] if images else report.image_data_url
     data = {
         'id': report.id,
         'pet_name': report.pet_name,
@@ -104,7 +167,8 @@ def _report_to_dict(report: LostPetReport, include_image: bool = False) -> dict:
         'updated_at': report.updated_at.isoformat(),
     }
     if include_image:
-        data['image_data_url'] = report.image_data_url
+        data['image_data_url'] = cover_image
+        data['imagenes'] = images
     return data
 
 
@@ -113,10 +177,25 @@ def reports(request):
     if request.method == 'GET':
         payload = _get_access_payload(request)
         include_unconfirmed = (request.GET.get('include_unconfirmed') or '').strip().lower() in {'1', 'true', 'yes'}
+        include_image = (request.GET.get('include_image') or '').strip().lower() in {'1', 'true', 'yes'}
+        ids_raw = (request.GET.get('ids') or '').strip()
 
         qs = LostPetReport.objects.all().order_by('-created_at')
         if not (_is_admin(payload) and include_unconfirmed):
             qs = qs.filter(is_confirmed=True)
+
+        if ids_raw:
+            ids = []
+            for chunk in ids_raw.split(','):
+                chunk = chunk.strip()
+                if not chunk:
+                    continue
+                try:
+                    ids.append(int(chunk))
+                except (TypeError, ValueError):
+                    return JsonResponse({'detail': 'invalid_ids'}, status=400)
+            if ids:
+                qs = qs.filter(id__in=ids)
 
         status_filter = (request.GET.get('status') or '').strip()
         if status_filter:
@@ -134,7 +213,7 @@ def reports(request):
         if species:
             qs = qs.filter(species__iexact=species)
 
-        data = [_report_to_dict(r, include_image=False) for r in qs[:200]]
+        data = [_report_to_dict(r, include_image=include_image) for r in qs[:200]]
         return JsonResponse({'results': data}, status=200)
 
     if request.method == 'POST':
@@ -151,6 +230,7 @@ def reports(request):
         species = (body.get('species') or '').strip()
         description = (body.get('description') or '').strip()
         image_data_url = (body.get('image_data_url') or '').strip()
+        raw_images = body.get('imagenes')
         region = (body.get('region') or '').strip()
         comuna = (body.get('comuna') or '').strip()
         status_value = _normalize_status(body.get('status') or 'perdido') or 'perdido'
@@ -164,16 +244,19 @@ def reports(request):
         if not pet_name:
             return JsonResponse({'detail': 'pet_name_required'}, status=400)
 
-        if not image_data_url:
-            return JsonResponse({'detail': 'image_required'}, status=400)
-
         if not species or not region or not comuna:
             return JsonResponse({'detail': 'species_region_comuna_required'}, status=400)
 
-        if not image_data_url.startswith('data:image/'):
-            return JsonResponse({'detail': 'invalid_image'}, status=400)
-        if len(image_data_url) > 1_500_000:
-            return JsonResponse({'detail': 'image_too_large'}, status=400)
+        try:
+            images = _normalize_images(raw_images)
+        except ValueError:
+            return JsonResponse({'detail': 'invalid_images'}, status=400)
+
+        if image_data_url:
+            if not image_data_url.startswith('data:image/'):
+                return JsonResponse({'detail': 'invalid_image'}, status=400)
+            if len(image_data_url) > 1_500_000:
+                return JsonResponse({'detail': 'image_too_large'}, status=400)
 
         if contact_phone:
             if not re.fullmatch(r'^[+\d][\d\s\-().]{5,30}$', contact_phone):
@@ -212,6 +295,7 @@ def reports(request):
             species=species,
             description=description,
             image_data_url=image_data_url,
+            imagenes=images,
             region=region,
             comuna=comuna,
             latitude=latitude,
@@ -299,6 +383,15 @@ def report_detail(request, report_id: int):
                     had_changes = True
                 setattr(report, field, value)
 
+        if 'imagenes' in body:
+            try:
+                next_images = _normalize_images(body.get('imagenes'))
+            except ValueError:
+                return JsonResponse({'detail': 'invalid_images'}, status=400)
+            if report.imagenes != next_images:
+                had_changes = True
+            report.imagenes = next_images
+
         if 'latitude' in body or 'longitude' in body:
             latitude_raw = body.get('latitude', None)
             longitude_raw = body.get('longitude', None)
@@ -366,6 +459,162 @@ def report_detail(request, report_id: int):
         if not (is_admin or is_owner):
             return JsonResponse({'detail': 'forbidden'}, status=403)
         report.delete()
+        return HttpResponse(status=204)
+
+    return HttpResponseNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE'])
+
+
+@csrf_exempt
+def report_found_leads(request, report_id: int):
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    payload = _get_access_payload(request)
+    if payload is None:
+        return JsonResponse({'detail': 'unauthorized'}, status=401)
+
+    try:
+        report = LostPetReport.objects.get(id=report_id)
+    except LostPetReport.DoesNotExist:
+        return JsonResponse({'detail': 'not_found'}, status=404)
+
+    try:
+        body = _read_json(request)
+    except json.JSONDecodeError:
+        return JsonResponse({'detail': 'invalid_json'}, status=400)
+
+    image_data_url = (body.get('image_data_url') or '').strip()
+    raw_images = body.get('imagenes')
+    found_location = (body.get('found_location') or '').strip()
+
+    try:
+        images = _normalize_images(raw_images)
+    except ValueError:
+        return JsonResponse({'detail': 'invalid_images'}, status=400)
+
+    if image_data_url:
+        if not image_data_url.startswith('data:image/'):
+            return JsonResponse({'detail': 'invalid_image'}, status=400)
+        if len(image_data_url) > 1_500_000:
+            return JsonResponse({'detail': 'image_too_large'}, status=400)
+    if not found_location:
+        return JsonResponse({'detail': 'found_location_required'}, status=400)
+    if len(found_location) > 220:
+        return JsonResponse({'detail': 'found_location_too_long'}, status=400)
+
+    try:
+        finder_id = int(payload.get('sub'))
+    except (TypeError, ValueError):
+        return JsonResponse({'detail': 'invalid_user'}, status=401)
+
+    lead = FoundPetLead.objects.create(
+        report=report,
+        finder_id=finder_id,
+        found_location=found_location,
+        image_data_url=image_data_url,
+        imagenes=images,
+    )
+
+    return JsonResponse(
+        {
+            'id': lead.id,
+            'report_id': report.id,
+            'finder_id': lead.finder_id,
+            'found_location': lead.found_location,
+            'created_at': lead.created_at.isoformat(),
+        },
+        status=201,
+    )
+
+
+def _lead_to_dict(lead: FoundPetLead, include_image: bool = False) -> dict:
+    try:
+        images = _normalize_images(lead.imagenes)
+    except ValueError:
+        images = []
+    cover_image = images[0]['url_descarga'] if images else (lead.image_data_url or '')
+    data = {
+        'id': lead.id,
+        'report_id': lead.report_id,
+        'finder_id': lead.finder_id,
+        'found_location': lead.found_location,
+        'created_at': lead.created_at.isoformat(),
+    }
+    if include_image:
+        data['image_data_url'] = cover_image
+        data['imagenes'] = images
+    return data
+
+
+@csrf_exempt
+def found_lead_detail(request, lead_id: int):
+    try:
+        lead = FoundPetLead.objects.get(id=lead_id)
+    except FoundPetLead.DoesNotExist:
+        return JsonResponse({'detail': 'not_found'}, status=404)
+
+    payload = _get_access_payload(request)
+    if payload is None:
+        return JsonResponse({'detail': 'unauthorized'}, status=401)
+
+    is_admin = _is_admin(payload)
+    try:
+        is_owner = int(payload.get('sub')) == lead.finder_id
+    except (TypeError, ValueError):
+        is_owner = False
+
+    if request.method == 'GET':
+        if not (is_admin or is_owner):
+            return JsonResponse({'detail': 'not_found'}, status=404)
+        return JsonResponse(_lead_to_dict(lead, include_image=True), status=200)
+
+    if request.method in {'PATCH', 'PUT'}:
+        if not (is_admin or is_owner):
+            return JsonResponse({'detail': 'forbidden'}, status=403)
+        try:
+            body = _read_json(request)
+        except json.JSONDecodeError:
+            return JsonResponse({'detail': 'invalid_json'}, status=400)
+
+        had_changes = False
+        if 'found_location' in body:
+            next_location = (body.get('found_location') or '').strip()
+            if not next_location:
+                return JsonResponse({'detail': 'found_location_required'}, status=400)
+            if len(next_location) > 220:
+                return JsonResponse({'detail': 'found_location_too_long'}, status=400)
+            if lead.found_location != next_location:
+                had_changes = True
+            lead.found_location = next_location
+
+        if 'image_data_url' in body:
+            next_image_data_url = (body.get('image_data_url') or '').strip()
+            if next_image_data_url:
+                if not next_image_data_url.startswith('data:image/'):
+                    return JsonResponse({'detail': 'invalid_image'}, status=400)
+                if len(next_image_data_url) > 1_500_000:
+                    return JsonResponse({'detail': 'image_too_large'}, status=400)
+            if lead.image_data_url != next_image_data_url:
+                had_changes = True
+            lead.image_data_url = next_image_data_url
+
+        if 'imagenes' in body:
+            try:
+                next_images = _normalize_images(body.get('imagenes'))
+            except ValueError:
+                return JsonResponse({'detail': 'invalid_images'}, status=400)
+            if lead.imagenes != next_images:
+                had_changes = True
+            lead.imagenes = next_images
+
+        if had_changes:
+            lead.save()
+        return JsonResponse(_lead_to_dict(lead, include_image=True), status=200)
+
+    if request.method == 'DELETE':
+        if not (is_admin or is_owner):
+            return JsonResponse({'detail': 'forbidden'}, status=403)
+        lead.delete()
         return HttpResponse(status=204)
 
     return HttpResponseNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE'])

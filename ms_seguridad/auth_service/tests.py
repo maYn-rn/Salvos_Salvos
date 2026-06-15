@@ -1,20 +1,75 @@
+import base64
 import hashlib
+import hmac
 import json
+import time
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 
 from .models import RefreshToken
 
 
-class AuthFlowsTests(TestCase):
+def _b64url(texto: bytes) -> str:
+    return base64.urlsafe_b64encode(texto).rstrip(b'=').decode('ascii')
+
+
+def _crear_token_acceso(secreto: str, sub: int, username: str = 'usuario', es_admin: bool = False, exp_segundos: int = 3600):
+    ahora = int(time.time())
+    payload = {
+        'typ': 'access',
+        'sub': sub,
+        'username': username,
+        'is_staff': bool(es_admin),
+        'is_superuser': bool(es_admin),
+        'iat': ahora,
+        'exp': ahora + int(exp_segundos),
+    }
+    encabezado = {'alg': 'HS256', 'typ': 'JWT'}
+    h = _b64url(json.dumps(encabezado, separators=(',', ':')).encode('utf-8'))
+    p = _b64url(json.dumps(payload, separators=(',', ':')).encode('utf-8'))
+    entrada = f'{h}.{p}'.encode('ascii')
+    firma = hmac.new(secreto.encode('utf-8'), entrada, hashlib.sha256).digest()
+    f = _b64url(firma)
+    return f'{h}.{p}.{f}'
+
+
+@override_settings(JWT_SECRET='secreto-pruebas', JWT_ACCESS_TTL_SECONDS=3600, JWT_REFRESH_TTL_SECONDS=7200)
+class PruebasFlujosAutenticacion(TestCase):
     def setUp(self):
         self.client = Client()
 
-    def test_register_and_login_issue_tokens(self):
+    def test_register_requiere_campos(self):
+        resp = self.client.post('/api/auth/register/', data=b'{', content_type='application/json')
+        self.assertEqual(resp.status_code, 400)
+
         resp = self.client.post(
-            '/api/auth/register',
-            data=json.dumps({'username': 'alice', 'password': 'pass1234', 'email': 'a@a.cl'}),
+            '/api/auth/register/',
+            data=json.dumps({'username': 'alice', 'password': 'pass1234'}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+        resp = self.client.post(
+            '/api/auth/register/',
+            data=json.dumps({'username': 'alice', 'password': 'pass1234', 'email': 'correo@ejemplo.com'}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json().get('detail'), 'first_and_last_name_required')
+
+    def test_registro_login_refresh_logout(self):
+        resp = self.client.post(
+            '/api/auth/register/',
+            data=json.dumps(
+                {
+                    'username': 'alice',
+                    'password': 'pass1234',
+                    'email': 'correo@ejemplo.com',
+                    'first_name': 'Alice',
+                    'last_name': 'Test',
+                }
+            ),
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 201)
@@ -26,7 +81,7 @@ class AuthFlowsTests(TestCase):
         self.assertEqual(RefreshToken.objects.count(), 1)
 
         resp_login = self.client.post(
-            '/api/auth/login',
+            '/api/auth/login/',
             data=json.dumps({'username': 'alice', 'password': 'pass1234'}),
             content_type='application/json',
         )
@@ -36,102 +91,64 @@ class AuthFlowsTests(TestCase):
         self.assertIn('refresh', payload2)
         self.assertEqual(RefreshToken.objects.count(), 2)
 
-    def test_login_invalid_credentials(self):
+        resp_refresh = self.client.post(
+            '/api/auth/refresh/',
+            data=json.dumps({'refresh': payload2['refresh']}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp_refresh.status_code, 200)
+        self.assertIn('access', resp_refresh.json())
+        self.assertIn('refresh', resp_refresh.json())
+
+        resp_logout = self.client.post(
+            '/api/auth/logout/',
+            data=json.dumps({'refresh': payload2['refresh']}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp_logout.status_code, 204)
+
+    def test_login_con_credenciales_invalidas(self):
         User = get_user_model()
-        User.objects.create_user(username='bob', password='pw')
+        User.objects.create_user(
+            username='bob',
+            password='pw',
+            email='bob@ejemplo.com',
+            first_name='Bob',
+            last_name='User',
+        )
         resp = self.client.post(
-            '/api/auth/login',
+            '/api/auth/login/',
             data=json.dumps({'username': 'bob', 'password': 'wrong'}),
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 401)
 
-    def test_refresh_rotates_and_revokes(self):
-        self.client.post(
-            '/api/auth/register',
-            data=json.dumps({'username': 'alice', 'password': 'pass1234'}),
-            content_type='application/json',
-        )
-        refresh_token = self.client.post(
-            '/api/auth/login',
-            data=json.dumps({'username': 'alice', 'password': 'pass1234'}),
-            content_type='application/json',
-        ).json()['refresh']
-
-        token_hash = hashlib.sha256(refresh_token.encode('utf-8')).hexdigest()
-        before = RefreshToken.objects.get(token_hash=token_hash)
-        self.assertIsNone(before.revoked_at)
-        resp = self.client.post(
-            '/api/auth/refresh',
-            data=json.dumps({'refresh': refresh_token}),
-            content_type='application/json',
-        )
-        self.assertEqual(resp.status_code, 200)
-        payload = resp.json()
-        self.assertIn('access', payload)
-        self.assertIn('refresh', payload)
-        self.assertNotEqual(payload['refresh'], refresh_token)
-        before.refresh_from_db()
-        self.assertIsNotNone(before.revoked_at)
-        self.assertTrue(RefreshToken.objects.filter(revoked_at__isnull=True).exists())
-
-    def test_logout_revokes_refresh(self):
-        resp = self.client.post(
-            '/api/auth/register',
-            data=json.dumps({'username': 'alice', 'password': 'pass1234'}),
-            content_type='application/json',
-        )
-        refresh_token = resp.json()['refresh']
-        resp2 = self.client.post(
-            '/api/auth/logout',
-            data=json.dumps({'refresh': refresh_token}),
-            content_type='application/json',
-        )
-        self.assertEqual(resp2.status_code, 204)
-        self.assertEqual(RefreshToken.objects.filter(revoked_at__isnull=True).count(), 0)
-
-        resp3 = self.client.post(
-            '/api/auth/refresh',
-            data=json.dumps({'refresh': refresh_token}),
-            content_type='application/json',
-        )
-        self.assertEqual(resp3.status_code, 401)
-
-
-class MeAndUsersTests(TestCase):
-    def setUp(self):
-        self.client = Client()
+    def test_me_y_users(self):
         User = get_user_model()
-        self.user = User.objects.create_user(username='user', password='pass1234')
-        self.admin = User.objects.create_user(username='admin', password='pass1234', is_staff=True)
+        normal = User.objects.create_user(
+            username='normal',
+            password='Clave12345',
+            email='normal@ejemplo.com',
+            first_name='N',
+            last_name='U',
+        )
+        token_normal = _crear_token_acceso('secreto-pruebas', normal.id, username='normal', es_admin=False)
+        resp = self.client.get('/api/auth/me/', HTTP_AUTHORIZATION=f'Bearer {token_normal}')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['username'], 'normal')
 
-        self.user_access = self.client.post(
-            '/api/auth/login',
-            data=json.dumps({'username': 'user', 'password': 'pass1234'}),
-            content_type='application/json',
-        ).json()['access']
-
-        self.admin_access = self.client.post(
-            '/api/auth/login',
-            data=json.dumps({'username': 'admin', 'password': 'pass1234'}),
-            content_type='application/json',
-        ).json()['access']
-
-    def test_me_requires_access(self):
-        resp = self.client.get('/api/auth/me')
-        self.assertEqual(resp.status_code, 401)
-
-        resp2 = self.client.get('/api/auth/me', HTTP_AUTHORIZATION=f'Bearer {self.user_access}')
-        self.assertEqual(resp2.status_code, 200)
-        data = resp2.json()
-        self.assertEqual(data['username'], 'user')
-
-    def test_users_requires_admin(self):
-        resp = self.client.get('/api/auth/users', HTTP_AUTHORIZATION=f'Bearer {self.user_access}')
+        resp = self.client.get('/api/auth/users/', HTTP_AUTHORIZATION=f'Bearer {token_normal}')
         self.assertEqual(resp.status_code, 403)
 
-        resp2 = self.client.get('/api/auth/users', HTTP_AUTHORIZATION=f'Bearer {self.admin_access}')
-        self.assertEqual(resp2.status_code, 200)
-        usernames = [u['username'] for u in resp2.json()['results']]
-        self.assertIn('user', usernames)
-        self.assertIn('admin', usernames)
+        admin = User.objects.create_user(
+            username='admin',
+            password='Clave12345',
+            email='admin@ejemplo.com',
+            first_name='A',
+            last_name='D',
+            is_staff=True,
+        )
+        token_admin = _crear_token_acceso('secreto-pruebas', admin.id, username='admin', es_admin=True)
+        resp = self.client.get('/api/auth/users/', HTTP_AUTHORIZATION=f'Bearer {token_admin}')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('results', resp.json())

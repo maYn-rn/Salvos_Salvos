@@ -10,6 +10,7 @@ class LostPetReport(models.Model):
     species = models.CharField(max_length=50)
     description = models.TextField(blank=True)
     image_data_url = models.TextField(blank=True)
+    imagenes = models.JSONField(default=list, blank=True)
     region = models.CharField(max_length=100)
     comuna = models.CharField(max_length=100)
     latitude = models.FloatField(null=True, blank=True)
@@ -31,3 +32,12 @@ class LostPetReport(models.Model):
             models.Index(fields=['status', 'region', 'comuna']),
             models.Index(fields=['created_at']),
         ]
+
+
+class FoundPetLead(models.Model):
+    report = models.ForeignKey(LostPetReport, on_delete=models.CASCADE, related_name='found_leads')
+    finder_id = models.IntegerField()
+    found_location = models.CharField(max_length=220)
+    image_data_url = models.TextField()
+    imagenes = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)

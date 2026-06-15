@@ -1,6 +1,105 @@
 import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import CarruselReportesRecientes from '../components/CarruselReportesRecientes'
+
+function toFiniteInt(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 0
+  return Math.round(n)
+}
+
+function usePrefersReducedMotion() {
+  const [prefers, setPrefers] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const update = () => setPrefers(Boolean(mq.matches))
+    update()
+
+    if (mq.addEventListener) {
+      mq.addEventListener('change', update)
+      return () => mq.removeEventListener('change', update)
+    }
+
+    mq.addListener(update)
+    return () => mq.removeListener(update)
+  }, [])
+
+  return prefers
+}
+
+function useInViewOnce(ref, { threshold = 0.25 } = {}) {
+  const [inView, setInView] = useState(false)
+
+  useEffect(() => {
+    const node = ref?.current
+    if (!node || inView) return undefined
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+      setInView(true)
+      return undefined
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setInView(true)
+          observer.disconnect()
+        }
+      },
+      { threshold }
+    )
+
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [ref, threshold, inView])
+
+  return inView
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function useCountUp(targetValue, { delayMs = 80, enabled = true, maxDurationMs = 1800 } = {}) {
+  const target = useMemo(() => toFiniteInt(targetValue), [targetValue])
+  const [display, setDisplay] = useState(0)
+
+  useEffect(() => {
+    if (!enabled) {
+      setDisplay(0)
+      return undefined
+    }
+
+    setDisplay(0)
+    if (target === 0) return undefined
+
+    const direction = target > 0 ? 1 : -1
+    const steps = Math.max(1, Math.abs(target))
+    const intervalMs = clampNumber(Math.round(Math.max(1, maxDurationMs) / steps), 12, 60)
+    let intervalId = 0
+    const timeoutId = setTimeout(() => {
+      intervalId = setInterval(() => {
+        setDisplay((prev) => {
+          const next = prev + direction
+          if ((direction > 0 && next >= target) || (direction < 0 && next <= target)) {
+            clearInterval(intervalId)
+            return target
+          }
+          return next
+        })
+      }, intervalMs)
+    }, Math.max(0, delayMs))
+
+    return () => {
+      clearTimeout(timeoutId)
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [target, delayMs, enabled, maxDurationMs])
+
+  return display
+}
 
 export default function PaginaInicio({
   selectedReportId,
@@ -16,6 +115,14 @@ export default function PaginaInicio({
   onViewDetail,
   onResetDetail,
 }) {
+  const safeHeroStats = heroStats || {}
+  const statsRef = useRef(null)
+  const statsInView = useInViewOnce(statsRef)
+  const totalReports = useCountUp(safeHeroStats.totalReports, { enabled: statsInView })
+  const activeRegions = useCountUp(safeHeroStats.activeRegions, { enabled: statsInView })
+  const coveredComunas = useCountUp(safeHeroStats.coveredComunas, { enabled: statsInView })
+  const numberFormat = useMemo(() => new Intl.NumberFormat('es-CL'), [])
+
   return (
     <div className="mainInner mainInnerHome">
       {selectedReportId ? (
@@ -94,86 +201,49 @@ export default function PaginaInicio({
         </div>
       ) : (
         <>
-          <section className="section homeHero">
-            <div className="homeHeroContent">
-              <div className="homeHeroEyebrow">
-                {heroStats.totalReports} reportes activos en tu zona ahora mismo
+          <div className="fullBleed homeHeroBand">
+            <section className="section homeHero">
+              <div className="homeHeroContent">
+                <h1 className="homeHeroTitle">
+                  Encuentra a tu
+                  <span className="homeHeroAccent"> mascota perdida</span>
+                  <br />
+                  con tu comunidad
+                </h1>
+                <p className="homeHeroText">
+                  Reporta, busca y recibe alertas en tiempo real. Miles de vecinos listos para
+                  ayudarte a encontrar pistas cerca de tu zona.
+                </p>
+                <div className="homeHeroActions">
+                  <Link className="primaryBtn homeHeroBtn homeHeroBtnPrimary" to="/reportar">Perdi a mi mascota</Link>
+                  <a className="miniBtn homeHeroBtn homeHeroBtnSecondary" href="#inicio">Como funciona</a>
+                </div>
+
+                <div ref={statsRef} className="homeHeroStats" aria-label="Resumen de actividad">
+                  <div className="homeHeroStat">
+                    <strong key={`stat-total-${safeHeroStats.totalReports}`}>{numberFormat.format(totalReports)}</strong>
+                    <span>Reportes activos</span>
+                  </div>
+                  <div className="homeHeroStat">
+                    <strong key={`stat-regions-${safeHeroStats.activeRegions}`}>{numberFormat.format(activeRegions)}</strong>
+                    <span>Regiones cubiertas</span>
+                  </div>
+                  <div className="homeHeroStat">
+                    <strong key={`stat-comunas-${safeHeroStats.coveredComunas}`}>{numberFormat.format(coveredComunas)}</strong>
+                    <span>Comunas con alertas</span>
+                  </div>
+                </div>
               </div>
-              <h1 className="homeHeroTitle">
-                Encuentra a tu
-                <span className="homeHeroAccent"> mascota perdida</span>
-                <br />
-                con tu comunidad
-              </h1>
-              <p className="homeHeroText">
-                Reporta, busca y recibe alertas en tiempo real. Miles de vecinos listos para
-                ayudarte a encontrar pistas cerca de tu zona.
-              </p>
-              <div className="homeHeroActions">
-                <Link className="primaryBtn homeHeroBtn homeHeroBtnPrimary" to="/reportar">Perdi a mi mascota</Link>
-                <a className="miniBtn homeHeroBtn homeHeroBtnSecondary" href="#inicio">Como funciona</a>
-              </div>
 
-              <div className="homeHeroStats" aria-label="Resumen de actividad">
-                <div className="homeHeroStat">
-                  <strong>{heroStats.totalReports}</strong>
-                  <span>reportes activos</span>
-                </div>
-                <div className="homeHeroStat">
-                  <strong>{heroStats.activeRegions}</strong>
-                  <span>regiones cubiertas</span>
-                </div>
-                <div className="homeHeroStat">
-                  <strong>{heroStats.coveredComunas}</strong>
-                  <span>comunas con alertas</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section id="reportes" className="section">
-            <CarruselReportesRecientes title="Reportes recientes cerca de ti" reports={nearbyRecentReports} onMarkFound={onMarkFound} onCardClick={onViewDetail} />
-          </section>
-
-          <div className="fullBleed howShowcaseBand">
-            <section id="inicio" className="section howShowcase">
-              <div className="howShowcaseInner">
-                <div className="howHeading howHeadingLeft">
-                  <div className="howEyebrow">Como funciona</div>
-                  <h2 className="howTitle howTitleLight">Tres pasos para reunificar a tu mascota</h2>
-                </div>
-
-                <div className="howSteps howStepsDark">
-                  <article className="howStep howStepCard">
-                    <div className="howStepBadge howStepBadgeWarm">01</div>
-                    <div className="howIconBox howIconBoxDark">📸</div>
-                    <div className="howStepTitle howStepTitleLight">Reporta la perdida</div>
-                    <div className="howStepText howStepTextLight">
-                      Sube una foto, describe a tu mascota e indica la ultima ubicacion conocida. Solo toma unos minutos.
-                    </div>
-                  </article>
-
-                  <article className="howStep howStepCard">
-                    <div className="howStepBadge howStepBadgeGold">02</div>
-                    <div className="howIconBox howIconBoxDark">🔔</div>
-                    <div className="howStepTitle howStepTitleLight">La comunidad se activa</div>
-                    <div className="howStepText howStepTextLight">
-                      Vecinos en un radio de varios kilometros reciben una alerta inmediata. Cualquiera puede reportar un avistamiento.
-                    </div>
-                  </article>
-
-                  <article className="howStep howStepCard">
-                    <div className="howStepBadge howStepBadgeGreen">03</div>
-                    <div className="howIconBox howIconBoxDark">💗</div>
-                    <div className="howStepTitle howStepTitleLight">Reunificacion</div>
-                    <div className="howStepText howStepTextLight">
-                      Te conectamos con quien encontro a tu mascota y coordinamos el reencuentro lo antes posible.
-                    </div>
-                  </article>
-                </div>
+              <div className="homeHeroArt" aria-hidden="true">
+                <img className="homeHeroDog" src="/dog.png" alt="" />
               </div>
             </section>
           </div>
+
+          <section id="reportes" className="section">
+            <CarruselReportesRecientes title="Reportes recientes cerca de ti" reports={nearbyRecentReports} user={user} onCardClick={onViewDetail} />
+          </section>
         </>
       )}
     </div>

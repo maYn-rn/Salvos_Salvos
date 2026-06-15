@@ -1,14 +1,32 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 export default function DisposicionPublica({ user, isAdmin, busy, onLogout, year }) {
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
+  const publishRef = useRef(null)
+  const adoptionNext = encodeURIComponent('/adopciones/publicar')
 
   // Cierra el menú automáticamente si cambias de página
   useEffect(() => {
     setMenuOpen(false)
+    setPublishOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    if (!publishOpen) return undefined
+    const onPointerDown = (e) => {
+      if (!publishRef.current) return
+      if (!publishRef.current.contains(e.target)) setPublishOpen(false)
+    }
+    window.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('touchstart', onPointerDown, { passive: true })
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('touchstart', onPointerDown)
+    }
+  }, [publishOpen])
 
   if (String(location.pathname || '').includes('admin')) return null
 
@@ -22,13 +40,20 @@ export default function DisposicionPublica({ user, isAdmin, busy, onLogout, year
           </Link>
 
           {/* BOTÓN HAMBURGUESA */}
-          <button className="mobileMenuBtn" onClick={() => setMenuOpen(!menuOpen)}>
+          <button
+            type="button"
+            className="mobileMenuBtn"
+            aria-label={menuOpen ? 'Cerrar menu principal' : 'Abrir menu principal'}
+            aria-expanded={menuOpen}
+            aria-controls="site-navigation"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
             {menuOpen ? '✖' : '☰'}
           </button>
 
           {/* CONTENEDOR MAESTRO: En PC es horizontal, en Móvil es un panel flotante */}
           <div className={`navAndActions ${menuOpen ? 'open' : ''}`}>
-            <nav className="siteNav" aria-label="Navegación principal">
+            <nav id="site-navigation" className="siteNav" aria-label="Navegación principal">
               <Link className="navLink" to="/">Inicio</Link>
               <Link className="navLink" to="/mapa">Mapa</Link>
               <Link className="navLink" to="/adopciones">Adopciones</Link>
@@ -59,9 +84,37 @@ export default function DisposicionPublica({ user, isAdmin, busy, onLogout, year
                 </Link>
               )}
 
-              <Link className="reportBtn" to={user ? '/reportar' : '/login?next=/reportar'}>
-                Registrar mascota
-              </Link>
+              <div className="publishMenuWrap" ref={publishRef}>
+                <button
+                  className="reportBtn publishBtn"
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={publishOpen}
+                  onClick={() => setPublishOpen((v) => !v)}
+                >
+                  + Publicar
+                </button>
+                {publishOpen ? (
+                  <div className="publishMenu" role="menu" aria-label="Opciones de publicación">
+                    <Link
+                      className="publishMenuItem"
+                      role="menuitem"
+                      to={user ? '/reportar' : '/login?next=/reportar'}
+                      onClick={() => setPublishOpen(false)}
+                    >
+                      + Publicar reporte
+                    </Link>
+                    <Link
+                      className="publishMenuItem"
+                      role="menuitem"
+                      to={user ? '/adopciones/publicar' : `/login?next=${adoptionNext}`}
+                      onClick={() => setPublishOpen(false)}
+                    >
+                      + Publicar adopción
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>

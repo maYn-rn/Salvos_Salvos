@@ -12,9 +12,67 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BASE_DIR.parent
+
+
+def load_env_file(env_path):
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding='utf-8').splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+
+        key, value = line.split('=', 1)
+        key = key.strip()
+        value = value.strip()
+        if value and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
+def build_database_config(service_prefix):
+    if (os.environ.get('FORZAR_SQLITE') or '').strip().lower() in {'1', 'true', 'yes', 'si', 'sí'}:
+        return {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+
+    database_url = (
+        os.environ.get(f'{service_prefix}_DATABASE_URL')
+        or os.environ.get('DATABASE_URL')
+        or os.environ.get('SUPABASE_DB_URL')
+    )
+    if database_url:
+        parsed = urlparse(database_url)
+        return {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': unquote(parsed.path.lstrip('/') or 'postgres'),
+            'USER': unquote(parsed.username or ''),
+            'PASSWORD': unquote(parsed.password or ''),
+            'HOST': parsed.hostname or 'localhost',
+            'PORT': str(parsed.port or 5432),
+            'CONN_MAX_AGE': int(
+                os.environ.get(f'{service_prefix}_DB_CONN_MAX_AGE', os.environ.get('DB_CONN_MAX_AGE', '60'))
+            ),
+            'OPTIONS': {
+                'sslmode': os.environ.get(f'{service_prefix}_DB_SSLMODE', os.environ.get('DB_SSLMODE', 'require')),
+            },
+        }
+
+    return {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+
+
+for candidate in (PROJECT_ROOT / '.env', BASE_DIR / '.env'):
+    load_env_file(candidate)
 
 
 # Quick-start development settings - unsuitable for production
@@ -75,10 +133,7 @@ WSGI_APPLICATION = 'ms_mascotas.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': build_database_config('MASCOTAS')
 }
 
 

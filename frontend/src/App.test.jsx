@@ -71,8 +71,9 @@ describe('App', () => {
     const banner = await screen.findByRole('banner')
     expect(within(banner).getByText('Sanos y Salvos')).toBeInTheDocument()
     expect(within(banner).getByRole('link', { name: 'Inicio' })).toBeInTheDocument()
-    expect(within(banner).getByRole('link', { name: 'Sobre nosotros' })).toBeInTheDocument()
-    expect(within(banner).getByRole('link', { name: 'Preguntas frecuentes' })).toBeInTheDocument()
+    expect(within(banner).getByRole('link', { name: 'Mapa' })).toBeInTheDocument()
+    expect(within(banner).getByRole('link', { name: 'Adopciones' })).toBeInTheDocument()
+    expect(within(banner).getByRole('link', { name: 'Consejos' })).toBeInTheDocument()
 
     const footer = screen.getByRole('contentinfo')
     expect(within(footer).getByText(/©/)).toBeInTheDocument()
@@ -95,6 +96,6 @@ describe('App', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: 'Preguntas frecuentes' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Preguntas Frecuentes/i })).toBeInTheDocument()
   })
 })

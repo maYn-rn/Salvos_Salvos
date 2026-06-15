@@ -161,3 +161,97 @@ export function formatDateShort(iso) {
   if (Number.isNaN(d.getTime())) return ''
   return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short' }).format(d)
 }
+
+function supportsMimeType(type) {
+  try {
+    const canvas = document.createElement('canvas')
+    const data = canvas.toDataURL(type)
+    return typeof data === 'string' && data.startsWith(`data:${type}`)
+  } catch {
+    return false
+  }
+}
+
+async function blobToDataUrl(blob) {
+  const reader = new FileReader()
+  return await new Promise((resolve, reject) => {
+    reader.onerror = () => reject(new Error('read_error'))
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function fileToBitmap(file) {
+  if (typeof createImageBitmap === 'function') {
+    return await createImageBitmap(file)
+  }
+  const url = URL.createObjectURL(file)
+  try {
+    const img = new Image()
+    img.decoding = 'async'
+    img.src = url
+    await new Promise((resolve, reject) => {
+      img.onload = resolve
+      img.onerror = reject
+    })
+    const canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth || img.width
+    canvas.height = img.naturalHeight || img.height
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    return await createImageBitmap(canvas)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+async function canvasToBlob(canvas, type, quality) {
+  return await new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality)
+  })
+}
+
+export async function optimizeImageFileToDataUrl(
+  file,
+  { maxEdge = 1400, maxBytes = 650_000, mimePreference = 'image/webp' } = {}
+) {
+  if (!file) return ''
+  const chosenMime = supportsMimeType(mimePreference) ? mimePreference : 'image/jpeg'
+  const bitmap = await fileToBitmap(file)
+  const srcW = bitmap.width || 0
+  const srcH = bitmap.height || 0
+  if (!srcW || !srcH) return ''
+
+  let scale = Math.min(1, maxEdge / Math.max(srcW, srcH))
+  let quality = chosenMime === 'image/webp' ? 0.82 : 0.86
+
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d', { alpha: false })
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const w = Math.max(1, Math.round(srcW * scale))
+    const h = Math.max(1, Math.round(srcH * scale))
+    canvas.width = w
+    canvas.height = h
+    ctx.clearRect(0, 0, w, h)
+    ctx.drawImage(bitmap, 0, 0, w, h)
+
+    const blob = await canvasToBlob(canvas, chosenMime, quality)
+    if (!blob) break
+    if (blob.size <= maxBytes) {
+      return await blobToDataUrl(blob)
+    }
+
+    if (quality > 0.62) {
+      quality = Math.max(0.62, quality - 0.08)
+    } else {
+      scale = Math.max(0.45, scale * 0.88)
+    }
+  }
+
+  const fallbackBlob = await canvasToBlob(canvas, chosenMime, 0.62)
+  if (!fallbackBlob) return ''
+  return await blobToDataUrl(fallbackBlob)
+}

@@ -21,14 +21,13 @@ class AdoptionListingAdmin(admin.ModelAdmin):
         'pet_name',
         'species',
         'publisher_type',
-        'adoption_status',
         'region',
         'comuna',
         'is_confirmed',
         'publisher_id',
         'created_at',
     )
-    list_filter = ('is_confirmed', 'publisher_type', 'species', 'adoption_status', 'region')
+    list_filter = ('is_confirmed', 'publisher_type', 'species', 'region')
     search_fields = ('pet_name', 'breed', 'region', 'comuna', 'contact_name', 'contact_phone', 'contact_email', 'shelter_name')
     readonly_fields = ('created_at', 'updated_at', 'confirmed_at', 'confirmed_by')
     actions = (confirm_listings, unconfirm_listings)

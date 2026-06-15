@@ -21,6 +21,11 @@ export default function PaginaReporte({
   onImageChange,
   onClearSuccess,
 }) {
+  function quitarImagen(indice) {
+    const actuales = reportForm.imagenes_locales || []
+    onReportFormChange({ imagenes_locales: actuales.filter((_, i) => i !== indice) })
+  }
+
   return (
     <div className="mainInner">
       <div style={{ marginBottom: '16px' }}>
@@ -80,9 +85,32 @@ export default function PaginaReporte({
                   </select>
                 </label>
                 <label className="field">
-                  <span>Imagen *</span>
-                  <input type="file" accept="image/*" onChange={onImageChange} required />
-                  {reportForm.image_file_name ? <span className="fileHint">Seleccionada: {reportForm.image_file_name}</span> : null}
+                  <span>Imágenes *</span>
+                  <input type="file" accept="image/*" multiple onChange={onImageChange} required />
+                  <span className="fileHint">
+                    {(reportForm.imagenes_locales || []).length
+                      ? `${(reportForm.imagenes_locales || []).length} de 3 imágenes seleccionadas`
+                      : 'Obligatorias. Puedes subir hasta 3.'}
+                  </span>
+                  {(reportForm.imagenes_locales || []).length ? (
+                    <div className="adoptionUploadPreviewGrid">
+                      {(reportForm.imagenes_locales || []).map((imagen, index) => (
+                        <div key={`${imagen.nombre_original || 'imagen'}-${index}`} className="adoptionUploadPreviewCard">
+                          <img
+                            className="adoptionUploadPreviewImg"
+                            src={imagen.vista_previa}
+                            alt={imagen.nombre_original || `Imagen ${index + 1}`}
+                          />
+                          <div className="adoptionUploadPreviewMeta">
+                            <span>{index === 0 ? 'Portada' : `Imagen ${index + 1}`}</span>
+                            <button type="button" className="miniBtn" onClick={() => quitarImagen(index)}>
+                              Quitar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </label>
                 <label className="field">
                   <span>Descripción</span>

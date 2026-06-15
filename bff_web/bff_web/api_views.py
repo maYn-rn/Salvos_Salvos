@@ -202,6 +202,13 @@ def adoptions_proxy(request):
 
 
 @csrf_exempt
+def archivos_proxy(request):
+    if request.method not in {'GET', 'POST', 'OPTIONS'}:
+        return HttpResponseNotAllowed(['GET', 'POST', 'OPTIONS'])
+    return _forward(request, settings.ARCHIVOS_SERVICE_BASE_URL)
+
+
+@csrf_exempt
 def report_detail_proxy(request, report_id: int):
     if request.method not in {'GET', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'}:
         return HttpResponseNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'])
@@ -210,7 +217,35 @@ def report_detail_proxy(request, report_id: int):
 
 
 @csrf_exempt
+def report_found_leads_proxy(request, report_id: int):
+    if request.method not in {'POST', 'OPTIONS'}:
+        return HttpResponseNotAllowed(['POST', 'OPTIONS'])
+    return _forward(request, settings.MASCOTAS_SERVICE_BASE_URL)
+
+
+@csrf_exempt
+def report_found_lead_detail_proxy(request, lead_id: int):
+    if request.method not in {'GET', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'}:
+        return HttpResponseNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'])
+    return _forward(request, settings.MASCOTAS_SERVICE_BASE_URL)
+
+
+@csrf_exempt
 def adoption_detail_proxy(request, adoption_id: int):
     if request.method not in {'GET', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'}:
         return HttpResponseNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'])
     return _forward(request, settings.ADOPTIONS_SERVICE_BASE_URL)
+
+
+@csrf_exempt
+def archivo_detalle_proxy(request, archivo_id: int):
+    if request.method not in {'GET', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'}:
+        return HttpResponseNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'])
+    return _forward(request, settings.ARCHIVOS_SERVICE_BASE_URL)
+
+
+@csrf_exempt
+def archivo_descargar_proxy(request, archivo_id: int):
+    if request.method not in {'GET', 'OPTIONS'}:
+        return HttpResponseNotAllowed(['GET', 'OPTIONS'])
+    return _forward(request, settings.ARCHIVOS_SERVICE_BASE_URL)

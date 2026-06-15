@@ -131,12 +131,17 @@ def register(request):
     username = (body.get('username') or '').strip()
     password = body.get('password') or ''
     email = (body.get('email') or '').strip() or None
+    first_name = (body.get('first_name') or '').strip()
+    last_name = (body.get('last_name') or '').strip()
 
     if not username or not password:
         return JsonResponse({'detail': 'username_and_password_required'}, status=400)
 
     if not email:
         return JsonResponse({'detail': 'email_required'}, status=400)
+
+    if not first_name or not last_name:
+        return JsonResponse({'detail': 'first_and_last_name_required'}, status=400)
 
     try:
         validate_email(email)
@@ -145,7 +150,13 @@ def register(request):
 
     User = get_user_model()
     try:
-        user = User.objects.create_user(username=username, password=password, email=email)
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            email=email,
+            first_name=first_name[:150],
+            last_name=last_name[:150],
+        )
     except IntegrityError:
         return JsonResponse({'detail': 'username_already_exists'}, status=409)
 
@@ -275,6 +286,8 @@ def me(request):
             'id': user.id,
             'username': user.get_username(),
             'email': getattr(user, 'email', '') or '',
+            'first_name': getattr(user, 'first_name', '') or '',
+            'last_name': getattr(user, 'last_name', '') or '',
             'is_staff': bool(getattr(user, 'is_staff', False)),
             'is_superuser': bool(getattr(user, 'is_superuser', False)),
             'is_active': bool(getattr(user, 'is_active', True)),
@@ -315,6 +328,8 @@ def users(request):
             'id': u.id,
             'username': u.get_username(),
             'email': getattr(u, 'email', '') or '',
+            'first_name': getattr(u, 'first_name', '') or '',
+            'last_name': getattr(u, 'last_name', '') or '',
             'is_staff': bool(getattr(u, 'is_staff', False)),
             'is_superuser': bool(getattr(u, 'is_superuser', False)),
             'is_active': bool(getattr(u, 'is_active', True)),

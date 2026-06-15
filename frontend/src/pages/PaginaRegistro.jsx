@@ -77,7 +77,11 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
   return (
     <div className="mainInner">
       <section className="card authCard">
-        <h2 className="cardTitle">Registro</h2>
+        <div className="authHeader">
+          <img className="authHeaderLogo" src="/logo_nuevo_sys.png" alt="" />
+          <div className="authHeaderTitle">Crea tu cuenta</div>
+          <div className="authHeaderSubtitle">Únete a la comunidad de amantes de mascotas</div>
+        </div>
         
         {(error || localError) ? (
           <div className="formError" style={{ color: 'red', marginBottom: '10px' }}>
@@ -87,28 +91,97 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
 
         <form className="form" onSubmit={handleLocalSubmit}>
           <label className="field">
+            <span>Nombre</span>
+            <div className="fieldControl">
+              <span className="fieldIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M20 21a8 8 0 0 0-16 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <input value={authForm.first_name || ''} onChange={(e) => onAuthFormChange({ first_name: e.target.value })} autoComplete="given-name" placeholder="Ej: Matias" required />
+            </div>
+          </label>
+
+          <label className="field">
+            <span>Apellido</span>
+            <div className="fieldControl">
+              <span className="fieldIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M20 21a8 8 0 0 0-16 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <input value={authForm.last_name || ''} onChange={(e) => onAuthFormChange({ last_name: e.target.value })} autoComplete="family-name" placeholder="Ej: Gonzalez" required />
+            </div>
+          </label>
+
+          <label className="field">
             <span>Usuario</span>
-            <input value={authForm.username || ''} onChange={(e) => onAuthFormChange({ username: e.target.value })} autoComplete="username" required />
+            <div className="fieldControl">
+              <span className="fieldIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M20 21a8 8 0 0 0-16 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <input value={authForm.username || ''} onChange={(e) => onAuthFormChange({ username: e.target.value })} autoComplete="username" placeholder="Ej: matias123" required />
+            </div>
           </label>
 
           <label className="field">
             <span>RUT</span>
-            <input value={authForm.rut || ''} onChange={handleRutChange} placeholder="12.345.678-9" maxLength={12} required />
+            <div className="fieldControl">
+              <span className="fieldIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4 7a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                  <path d="M8 8h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M8 12h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M8 16h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </span>
+              <input value={authForm.rut || ''} onChange={handleRutChange} placeholder="Ej: 12.345.678-9" maxLength={12} required />
+            </div>
           </label>
 
           <label className="field">
             <span>Email</span>
-            <input type="email" value={authForm.email || ''} onChange={(e) => onAuthFormChange({ email: e.target.value })} autoComplete="email" required />
+            <div className="fieldControl">
+              <span className="fieldIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7Z" stroke="currentColor" strokeWidth="2" />
+                  <path d="m6 8 6 5 6-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <input type="email" value={authForm.email || ''} onChange={(e) => onAuthFormChange({ email: e.target.value })} autoComplete="email" placeholder="Ej: correo@ejemplo.com" required />
+            </div>
           </label>
 
           <label className="field">
             <span>Contraseña</span>
-            <input type="password" value={authForm.password || ''} onChange={(e) => onAuthFormChange({ password: e.target.value })} autoComplete="new-password" required />
+            <div className="fieldControl">
+              <span className="fieldIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7 11V8a5 5 0 0 1 10 0v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M6 11h12a2 2 0 0 1 2 2v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-6a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <input type="password" value={authForm.password || ''} onChange={(e) => onAuthFormChange({ password: e.target.value })} autoComplete="new-password" placeholder="Ej: MiClave123" required />
+            </div>
           </label>
 
           <label className="field">
             <span>Confirmar Contraseña</span>
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" required />
+            <div className="fieldControl">
+              <span className="fieldIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7 11V8a5 5 0 0 1 10 0v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M6 11h12a2 2 0 0 1 2 2v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-6a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                  <path d="m9.2 16.1 1.8 1.8 3.8-3.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" placeholder="Repite tu contraseña" required />
+            </div>
           </label>
 
           <button className="primaryBtn" type="submit" disabled={busy}>

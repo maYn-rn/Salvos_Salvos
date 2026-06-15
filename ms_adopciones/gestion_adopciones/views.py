@@ -77,14 +77,85 @@ def _normalize_publisher_type(value: str) -> str:
     return (value or '').strip()
 
 
-def _normalize_adoption_status(value: str) -> str:
-    raw = (value or '').strip().lower()
-    if raw in {'disponible', 'reservado', 'adoptado'}:
-        return raw
-    return (value or '').strip()
+def _parse_bool(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    raw = str(value).strip().lower()
+    if raw == '':
+        return None
+    if raw in {'1', 'true', 'yes', 'si', 'sí'}:
+        return True
+    if raw in {'0', 'false', 'no'}:
+        return False
+    return None
+
+
+def _normalize_images(value) -> list[dict]:
+    if value in (None, ''):
+        return []
+    if not isinstance(value, list):
+        raise ValueError('invalid_images')
+
+    normalized = []
+    for index, item in enumerate(value[:3]):
+        if not isinstance(item, dict):
+            raise ValueError('invalid_images')
+
+        image_id = item.get('id')
+        if image_id in (None, ''):
+            image_id = None
+        else:
+            try:
+                image_id = int(image_id)
+            except (TypeError, ValueError):
+                raise ValueError('invalid_images')
+
+        image_url = (item.get('url_descarga') or item.get('url') or '').strip()
+        if not image_url:
+            raise ValueError('invalid_images')
+
+        category = (item.get('categoria') or ('principal' if index == 0 else 'galeria')).strip() or 'galeria'
+
+        try:
+            order = int(item.get('orden', index + 1))
+        except (TypeError, ValueError):
+            raise ValueError('invalid_images')
+        if order < 1:
+            raise ValueError('invalid_images')
+
+        normalized.append({
+            'id': image_id,
+            'url_descarga': image_url,
+            'categoria': category,
+            'orden': order,
+        })
+
+    normalized.sort(key=lambda image: (image.get('orden') or 0, image.get('id') or 0))
+    return normalized
+
+
+def _public_images(listing: AdoptionListing) -> list[dict]:
+    try:
+        images = _normalize_images(listing.imagenes)
+    except ValueError:
+        images = []
+    if images:
+        return images
+    if listing.image_data_url:
+        return [{
+            'id': None,
+            'url_descarga': listing.image_data_url,
+            'categoria': 'principal',
+            'orden': 1,
+        }]
+    return []
 
 
 def _listing_to_dict(listing: AdoptionListing, include_image: bool = False) -> dict:
+    images = _public_images(listing)
+    cover_image = images[0]['url_descarga'] if images else listing.image_data_url
     data = {
         'id': listing.id,
         'pet_name': listing.pet_name,
@@ -94,6 +165,12 @@ def _listing_to_dict(listing: AdoptionListing, include_image: bool = False) -> d
         'sex': listing.sex,
         'size': listing.size,
         'description': listing.description,
+        'color': listing.color,
+        'is_sterilized': listing.is_sterilized,
+        'vaccines_up_to_date': listing.vaccines_up_to_date,
+        'has_microchip': listing.has_microchip,
+        'adoption_reason': listing.adoption_reason,
+        'behavior_notes': listing.behavior_notes,
         'region': listing.region,
         'comuna': listing.comuna,
         'latitude': listing.latitude,
@@ -101,7 +178,6 @@ def _listing_to_dict(listing: AdoptionListing, include_image: bool = False) -> d
         'publisher_type': listing.publisher_type,
         'shelter_name': listing.shelter_name,
         'health_notes': listing.health_notes,
-        'adoption_status': listing.adoption_status,
         'contact_name': listing.contact_name,
         'contact_phone': listing.contact_phone,
         'contact_email': listing.contact_email,
@@ -111,9 +187,10 @@ def _listing_to_dict(listing: AdoptionListing, include_image: bool = False) -> d
         'confirmed_by': listing.confirmed_by,
         'created_at': listing.created_at.isoformat(),
         'updated_at': listing.updated_at.isoformat(),
+        'image_data_url': cover_image,
     }
     if include_image:
-        data['image_data_url'] = listing.image_data_url
+        data['imagenes'] = images
     return data
 
 
@@ -158,14 +235,22 @@ def adoptions(request):
     if request.method == 'GET':
         payload = _get_access_payload(request)
         include_unconfirmed = (request.GET.get('include_unconfirmed') or '').strip().lower() in {'1', 'true', 'yes'}
+        include_image = (request.GET.get('include_image') or '').strip().lower() in {'1', 'true', 'yes'}
+        include_mine = (request.GET.get('include_mine') or '').strip().lower() in {'1', 'true', 'yes'}
 
         qs = AdoptionListing.objects.all().order_by('-created_at')
         if not (_is_admin(payload) and include_unconfirmed):
-            qs = qs.filter(is_confirmed=True)
-
-        status_filter = _normalize_adoption_status(request.GET.get('adoption_status') or request.GET.get('status') or '')
-        if status_filter:
-            qs = qs.filter(adoption_status=status_filter)
+            if payload is not None and include_mine:
+                try:
+                    user_id = int(payload.get('sub'))
+                except (TypeError, ValueError):
+                    user_id = None
+                if user_id is not None:
+                    qs = qs.filter(Q(is_confirmed=True) | Q(publisher_id=user_id))
+                else:
+                    qs = qs.filter(is_confirmed=True)
+            else:
+                qs = qs.filter(is_confirmed=True)
 
         region = (request.GET.get('region') or '').strip()
         if region:
@@ -194,7 +279,7 @@ def adoptions(request):
                 | Q(shelter_name__icontains=q)
             )
 
-        data = [_listing_to_dict(listing, include_image=False) for listing in qs[:200]]
+        data = [_listing_to_dict(listing, include_image=include_image) for listing in qs[:200]]
         return JsonResponse({'results': data}, status=200)
 
     if request.method == 'POST':
@@ -215,12 +300,18 @@ def adoptions(request):
         size = (body.get('size') or '').strip()
         description = (body.get('description') or '').strip()
         image_data_url = (body.get('image_data_url') or '').strip()
+        raw_images = body.get('imagenes')
+        color = (body.get('color') or '').strip()
+        is_sterilized = _parse_bool(body.get('is_sterilized'))
+        vaccines_up_to_date = _parse_bool(body.get('vaccines_up_to_date'))
+        has_microchip = _parse_bool(body.get('has_microchip'))
+        adoption_reason = (body.get('adoption_reason') or '').strip()
+        behavior_notes = (body.get('behavior_notes') or '').strip()
         region = (body.get('region') or '').strip()
         comuna = (body.get('comuna') or '').strip()
         publisher_type = _normalize_publisher_type(body.get('publisher_type') or 'persona') or 'persona'
         shelter_name = (body.get('shelter_name') or '').strip()
         health_notes = (body.get('health_notes') or '').strip()
-        adoption_status = _normalize_adoption_status(body.get('adoption_status') or 'disponible') or 'disponible'
         contact_name = (body.get('contact_name') or '').strip()
         contact_phone = (body.get('contact_phone') or '').strip()
         contact_email = (body.get('contact_email') or '').strip()
@@ -231,12 +322,21 @@ def adoptions(request):
             return JsonResponse({'detail': 'pet_name_required'}, status=400)
         if not species or not region or not comuna:
             return JsonResponse({'detail': 'species_region_comuna_required'}, status=400)
+        if not description:
+            return JsonResponse({'detail': 'description_required'}, status=400)
+        if not adoption_reason:
+            return JsonResponse({'detail': 'adoption_reason_required'}, status=400)
+        if is_sterilized is None or vaccines_up_to_date is None or has_microchip is None:
+            return JsonResponse({'detail': 'health_fields_required'}, status=400)
         if not contact_name:
             return JsonResponse({'detail': 'contact_name_required'}, status=400)
         if publisher_type not in {'persona', 'albergue'}:
             return JsonResponse({'detail': 'invalid_publisher_type'}, status=400)
-        if adoption_status not in {'disponible', 'reservado', 'adoptado'}:
-            return JsonResponse({'detail': 'invalid_adoption_status'}, status=400)
+
+        try:
+            images = _normalize_images(raw_images)
+        except ValueError:
+            return JsonResponse({'detail': 'invalid_images'}, status=400)
 
         if image_data_url:
             if not image_data_url.startswith('data:image/'):
@@ -261,6 +361,13 @@ def adoptions(request):
             size=size,
             description=description,
             image_data_url=image_data_url,
+            imagenes=images,
+            color=color,
+            is_sterilized=is_sterilized,
+            vaccines_up_to_date=vaccines_up_to_date,
+            has_microchip=has_microchip,
+            adoption_reason=adoption_reason,
+            behavior_notes=behavior_notes,
             region=region,
             comuna=comuna,
             latitude=latitude,
@@ -268,7 +375,6 @@ def adoptions(request):
             publisher_type=publisher_type,
             shelter_name=shelter_name,
             health_notes=health_notes,
-            adoption_status=adoption_status,
             contact_name=contact_name,
             contact_phone=contact_phone,
             contact_email=contact_email,
@@ -331,6 +437,9 @@ def adoption_detail(request, listing_id: int):
             'size',
             'description',
             'image_data_url',
+            'color',
+            'adoption_reason',
+            'behavior_notes',
             'region',
             'comuna',
             'shelter_name',
@@ -355,6 +464,25 @@ def adoption_detail(request, listing_id: int):
                     had_changes = True
                 setattr(listing, field, value)
 
+        bool_fields = ['is_sterilized', 'vaccines_up_to_date', 'has_microchip']
+        for field in bool_fields:
+            if field in body:
+                parsed = _parse_bool(body.get(field))
+                if parsed is None:
+                    return JsonResponse({'detail': 'invalid_bool'}, status=400)
+                if getattr(listing, field) != parsed:
+                    had_changes = True
+                setattr(listing, field, parsed)
+
+        if 'imagenes' in body:
+            try:
+                next_images = _normalize_images(body.get('imagenes'))
+            except ValueError:
+                return JsonResponse({'detail': 'invalid_images'}, status=400)
+            if listing.imagenes != next_images:
+                had_changes = True
+            listing.imagenes = next_images
+
         if 'publisher_type' in body:
             next_publisher_type = _normalize_publisher_type(body.get('publisher_type') or '')
             if next_publisher_type not in {'persona', 'albergue'}:
@@ -362,14 +490,6 @@ def adoption_detail(request, listing_id: int):
             if listing.publisher_type != next_publisher_type:
                 had_changes = True
             listing.publisher_type = next_publisher_type
-
-        if 'adoption_status' in body or 'status' in body:
-            next_status = _normalize_adoption_status(body.get('adoption_status') or body.get('status') or '')
-            if next_status not in {'disponible', 'reservado', 'adoptado'}:
-                return JsonResponse({'detail': 'invalid_adoption_status'}, status=400)
-            if listing.adoption_status != next_status:
-                had_changes = True
-            listing.adoption_status = next_status
 
         if 'latitude' in body or 'longitude' in body:
             latitude_raw = body.get('latitude', None)

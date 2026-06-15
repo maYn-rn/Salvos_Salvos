@@ -1,8 +1,162 @@
-import { useMemo, useState } from 'react'
-import { CircleMarker, MapContainer, TileLayer } from 'react-leaflet'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { CircleMarker, MapContainer, Popup, TileLayer, ZoomControl, useMapEvents } from 'react-leaflet'
 
 import { InvalidarTamanoMapa, RecentrarMapa, MarcadoresReportes } from '../components/map/AyudantesMapa'
 import { getComunasForRegion, normalizeSpecies, normalizeStatus, REGION_VIEW, SPECIES_OPTIONS } from '../shared/appCore'
+
+const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter'
+
+function buildOverpassQuery(kind, bbox) {
+  const [south, west, north, east] = bbox
+  const bboxText = `${south},${west},${north},${east}`
+  const tag = kind === 'veterinary' ? '["amenity"="veterinary"]' : '["amenity"="animal_shelter"]'
+
+  return `[out:json][timeout:25];
+(
+  node${tag}(${bboxText});
+  way${tag}(${bboxText});
+  relation${tag}(${bboxText});
+);
+out center tags;`
+}
+
+function formatPoiAddress(tags) {
+  if (!tags) return ''
+  const street = tags['addr:street'] || ''
+  const number = tags['addr:housenumber'] || ''
+  const city = tags['addr:city'] || ''
+  const parts = []
+  const streetLine = `${street} ${number}`.trim()
+  if (streetLine) parts.push(streetLine)
+  if (city) parts.push(city)
+  return parts.join(', ')
+}
+
+function mapOverpassElementToPoi(kind, element) {
+  const tags = element?.tags || {}
+  const lat = element?.lat ?? element?.center?.lat
+  const lon = element?.lon ?? element?.center?.lon
+  if (lat == null || lon == null) return null
+
+  const fallbackName = kind === 'veterinary' ? 'Veterinaria' : 'Albergue'
+  const name = (tags.name || tags.operator || tags.brand || fallbackName).trim()
+  const address = formatPoiAddress(tags)
+
+  return {
+    id: `${kind}:${element.type}:${element.id}`,
+    kind,
+    lat: Number(lat),
+    lon: Number(lon),
+    name,
+    address,
+    phone: tags.phone || tags['contact:phone'] || '',
+    website: tags.website || tags['contact:website'] || '',
+  }
+}
+
+function bboxKey(bounds) {
+  const south = bounds.getSouth()
+  const west = bounds.getWest()
+  const north = bounds.getNorth()
+  const east = bounds.getEast()
+  return [south, west, north, east].map((n) => Number(n).toFixed(3)).join(',')
+}
+
+function toBbox(bounds) {
+  return [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()]
+}
+
+function PuntosInteres({ enabled, kind, color, fillColor }) {
+  const [pois, setPois] = useState([])
+  const lastKeyRef = useRef('')
+  const timerRef = useRef(0)
+  const abortRef = useRef(null)
+
+  const fetchPoisForCurrentView = async (map) => {
+    const bounds = map.getBounds()
+    const key = bboxKey(bounds)
+    if (key === lastKeyRef.current) return
+    lastKeyRef.current = key
+
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    try {
+      const query = buildOverpassQuery(kind, toBbox(bounds))
+      const resp = await fetch(OVERPASS_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
+      })
+      if (!resp.ok) throw new Error('No se pudo cargar la capa')
+      const json = await resp.json()
+      const items = (json?.elements || [])
+        .map((el) => mapOverpassElementToPoi(kind, el))
+        .filter(Boolean)
+        .slice(0, 140)
+      setPois(items)
+    } catch (e) {
+      if (e?.name === 'AbortError') return
+      setPois([])
+    }
+  }
+
+  const scheduleFetch = (map) => {
+    if (!enabled) return
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      fetchPoisForCurrentView(map)
+    }, 350)
+  }
+
+  const map = useMapEvents({
+    moveend: () => scheduleFetch(map),
+    zoomend: () => scheduleFetch(map),
+  })
+
+  useEffect(() => {
+    if (!enabled) {
+      setPois([])
+      lastKeyRef.current = ''
+      if (abortRef.current) abortRef.current.abort()
+      if (timerRef.current) clearTimeout(timerRef.current)
+      return
+    }
+    scheduleFetch(map)
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+      if (abortRef.current) abortRef.current.abort()
+    }
+  }, [enabled, kind, map])
+
+  if (!enabled) return null
+
+  return (
+    <>
+      {pois.map((poi) => (
+        <CircleMarker
+          key={poi.id}
+          center={[poi.lat, poi.lon]}
+          radius={6}
+          pathOptions={{ color, fillColor, fillOpacity: 0.9 }}
+        >
+          <Popup>
+            <div style={{ fontWeight: 900 }}>{poi.name}</div>
+            {poi.address ? <div style={{ marginTop: '4px' }}>{poi.address}</div> : null}
+            {poi.phone ? <div style={{ marginTop: '4px' }}>{poi.phone}</div> : null}
+            {poi.website ? (
+              <a href={poi.website} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: '6px' }}>
+                Sitio web
+              </a>
+            ) : null}
+          </Popup>
+        </CircleMarker>
+      ))}
+    </>
+  )
+}
 
 export default function PaginaMapa({ center, zoom, reports, lastCreatedReportId, userLocation, onViewDetail }) {
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -11,6 +165,8 @@ export default function PaginaMapa({ center, zoom, reports, lastCreatedReportId,
   const [species, setSpecies] = useState('todos')
   const [region, setRegion] = useState('')
   const [comuna, setComuna] = useState('')
+  const [showVets, setShowVets] = useState(false)
+  const [showShelters, setShowShelters] = useState(false)
 
   const filteredReports = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -43,24 +199,50 @@ export default function PaginaMapa({ center, zoom, reports, lastCreatedReportId,
     setComuna('')
   }
 
-  return (
-    <div className="mainInner mainInnerHome">
-      <section className="section mapPageIntro">
-        <div className="mapPageHeading">
-          <div className="howEyebrow">Mapa comunitario</div>
-          <h1 className="sectionTitle" style={{ marginTop: '8px' }}>Mapa completo de reportes</h1>
-          <p className="sectionSubtitle">
-            Revisa los avisos activos, explora marcadores cercanos y abre cada ficha para ver mas detalles.
-          </p>
-        </div>
-      </section>
+  const speciesNorm = normalizeSpecies(species)
+  const dogsActive = speciesNorm === 'perro'
+  const catsActive = speciesNorm === 'gato'
 
+  return (
+    <div className="mainInner">
       <div className="fullBleed">
-        <section className="section">
+        <section className="section mapPageShell">
           <div className="mapExplorer">
+            <div className="mapWrap mapExplorerCanvas">
             <button className="miniBtn mapFiltersToggle" type="button" onClick={() => setFiltersOpen((open) => !open)}>
               {filtersOpen ? 'Ocultar filtros' : 'Mostrar filtros'}
             </button>
+
+            <div className="mapOverlayButtons" role="group" aria-label="Capas del mapa">
+              <button
+                type="button"
+                className={`mapOverlayBtn${showVets ? ' isActive' : ''}`}
+                onClick={() => setShowVets((v) => !v)}
+              >
+                Veterinarios
+              </button>
+              <button
+                type="button"
+                className={`mapOverlayBtn${showShelters ? ' isActive' : ''}`}
+                onClick={() => setShowShelters((v) => !v)}
+              >
+                Albergues
+              </button>
+              <button
+                type="button"
+                className={`mapOverlayBtn${dogsActive ? ' isActive' : ''}`}
+                onClick={() => setSpecies(dogsActive ? 'todos' : 'Perro')}
+              >
+                Perros
+              </button>
+              <button
+                type="button"
+                className={`mapOverlayBtn${catsActive ? ' isActive' : ''}`}
+                onClick={() => setSpecies(catsActive ? 'todos' : 'Gato')}
+              >
+                Gatos
+              </button>
+            </div>
 
             <div className={`mapFiltersPanel${filtersOpen ? ' isOpen' : ''}`}>
               <div className="mapFiltersHeader">
@@ -69,11 +251,6 @@ export default function PaginaMapa({ center, zoom, reports, lastCreatedReportId,
                   <div className="mapFiltersTitle">Filtra reportes</div>
                 </div>
                 <button className="miniBtn" type="button" onClick={resetFilters}>Limpiar</button>
-              </div>
-
-              <div className="mapFiltersSummary">
-                <strong>{filteredReports.length}</strong>
-                <span>reportes visibles en el mapa</span>
               </div>
 
               <div className="mapFiltersForm">
@@ -119,21 +296,19 @@ export default function PaginaMapa({ center, zoom, reports, lastCreatedReportId,
                 </label>
               </div>
 
-              <div className="mapFiltersChips">
-                <span className="mapFilterChip">Perdidos: {filteredReports.filter((report) => normalizeStatus(report.status) === 'perdido').length}</span>
-                <span className="mapFilterChip">Encontrados: {filteredReports.filter((report) => normalizeStatus(report.status) === 'encontrado').length}</span>
-              </div>
             </div>
 
-            <div className="mapWrap mapFullBleed mapExplorerCanvas">
-              <MapContainer className="map mapExplorerMap" center={mapCenter} zoom={mapZoom} scrollWheelZoom>
+            <MapContainer className="map mapExplorerMap" center={mapCenter} zoom={mapZoom} scrollWheelZoom zoomControl={false}>
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
+              <ZoomControl position="topright" />
                 <RecentrarMapa center={mapCenter} zoom={mapZoom} />
                 <InvalidarTamanoMapa watch={`${filteredReports.length}-${filtersOpen}`} />
                 <MarcadoresReportes reports={filteredReports} highlightId={lastCreatedReportId} onSelectReport={onViewDetail} />
+                <PuntosInteres enabled={showVets} kind="veterinary" color="#0f7687" fillColor="#19a6b6" />
+                <PuntosInteres enabled={showShelters} kind="shelter" color="#f4a340" fillColor="#f4a340" />
                 {userLocation ? (
                   <CircleMarker
                     center={[userLocation.lat, userLocation.lng]}

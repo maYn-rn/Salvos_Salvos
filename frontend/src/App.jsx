@@ -4,7 +4,8 @@ import 'leaflet/dist/leaflet.css'
 
 import DisposicionPublica from './components/DisposicionPublica'
 import PanelAdministracion from './pages/PanelAdministracion'
-import PaginaAdopciones from './pages/PaginaAdopciones'
+import PaginaAdopcionDetalle from './pages/PaginaAdopcionDetalle'
+import PaginaAdopciones, { PaginaPublicarAdopcion } from './pages/PaginaAdopciones'
 import PaginaInicio from './pages/PaginaInicio'
 import PaginaInicioSesion from './pages/PaginaInicioSesion'
 import PaginaMapa from './pages/PaginaMapa'
@@ -14,7 +15,7 @@ import PaginaRegistro from './pages/PaginaRegistro'
 import PaginaReporte from './pages/PaginaReporte'
 // 1. IMPORTAMOS LA PÁGINA REAL DE VOLUNTARIOS
 import PaginaVoluntarios from './pages/PaginaVoluntarios' 
-import { apiRequest, haversineKm, refreshAccess, REGION_VIEW, setAccessToken } from './shared/appCore'
+import { apiRequest, haversineKm, optimizeImageFileToDataUrl, refreshAccess, REGION_VIEW, setAccessToken } from './shared/appCore'
 
 function App() {
   const year = new Date().getFullYear()
@@ -25,14 +26,13 @@ function App() {
   const [userLocation, setUserLocation] = useState(null)
   const [user, setUser] = useState(null)
   const [authMode, setAuthMode] = useState('login')
-  const [authForm, setAuthForm] = useState({ username: '', password: '', email: '', rut: '' })
+  const [authForm, setAuthForm] = useState({ username: '', password: '', email: '', rut: '', first_name: '', last_name: '' })
   const [reports, setReports] = useState([])
   const [lastCreatedReportId, setLastCreatedReportId] = useState(null)
   const [reportForm, setReportForm] = useState({
     pet_name: '',
     species: '',
-    image_data_url: '',
-    image_file_name: '',
+    imagenes_locales: [],
     region: '',
     comuna: '',
     description: '',
@@ -149,29 +149,82 @@ function App() {
   }
 
   async function onImageChange(e) {
-    const file = e.target.files?.[0]
-    if (!file) {
-      setReportForm((s) => ({ ...s, image_data_url: '', image_file_name: '' }))
+    const archivosSeleccionados = Array.from(e.target.files || [])
+    if (!archivosSeleccionados.length) {
+      setReportForm((s) => ({ ...s, imagenes_locales: [] }))
       return
     }
-    if (file.size > 700_000) {
-      setError('La imagen es muy grande (max 700KB)')
-      setReportForm((s) => ({ ...s, image_data_url: '', image_file_name: '' }))
+
+    setError('')
+    const archivosLimitados = archivosSeleccionados.slice(0, 3)
+    if (archivosSeleccionados.length > 3) {
+      setError('Solo puedes subir hasta 3 imágenes por reporte.')
+    }
+
+    try {
+      const imagenesLocales = []
+      for (const archivo of archivosLimitados) {
+        if (archivo.size > 10_000_000) {
+          setError(`La imagen "${archivo.name}" es muy grande. Usa una de máximo 10MB.`)
+          e.target.value = ''
+          return
+        }
+
+        const dataUrl = await optimizeImageFileToDataUrl(archivo, { maxEdge: 1400, maxBytes: 650_000 })
+        if (!dataUrl) {
+          setError(`No se pudo procesar la imagen "${archivo.name}"`)
+          e.target.value = ''
+          return
+        }
+
+        imagenesLocales.push({
+          nombre_original: archivo.name,
+          contenido_base64: dataUrl,
+          vista_previa: dataUrl,
+        })
+      }
+
+      setReportForm((s) => ({ ...s, imagenes_locales: imagenesLocales }))
+    } catch {
+      setError('No se pudieron procesar las imágenes')
+      setReportForm((s) => ({ ...s, imagenes_locales: [] }))
       e.target.value = ''
-      return
     }
-    const reader = new FileReader()
-    const dataUrl = await new Promise((resolve, reject) => {
-      reader.onerror = () => reject(new Error('read_error'))
-      reader.onload = () => resolve(String(reader.result || ''))
-      reader.readAsDataURL(file)
-    })
-    setReportForm((s) => ({ ...s, image_data_url: dataUrl, image_file_name: file.name }))
+  }
+
+  async function subirImagenesReporte(reportId, imagenesLocales) {
+    const imagenesSubidas = []
+    for (let index = 0; index < imagenesLocales.length; index += 1) {
+      const imagenLocal = imagenesLocales[index]
+      const resp = await apiRequest('/api/archivos/', {
+        method: 'POST',
+        body: {
+          tipo_entidad: 'reporte',
+          id_entidad: reportId,
+          categoria: index === 0 ? 'principal' : 'galeria',
+          orden: index + 1,
+          servicio_origen: 'ms_mascotas',
+          nombre_original: imagenLocal.nombre_original,
+          contenido_base64: imagenLocal.contenido_base64,
+        },
+      })
+      if (!resp.ok || !resp.data?.url_descarga) {
+        throw new Error(resp.data?.detail || 'No se pudo subir una de las imágenes')
+      }
+      imagenesSubidas.push({
+        id: resp.data.id,
+        url_descarga: resp.data.url_descarga,
+        categoria: resp.data.categoria || (index === 0 ? 'principal' : 'galeria'),
+        orden: resp.data.orden || index + 1,
+      })
+    }
+    return imagenesSubidas
   }
 
   const nearbyRecentReports = useMemo(() => {
     const parsed = (reports || [])
       .filter((r) => r && r.created_at)
+      .filter((r) => String(r.status || '').toLowerCase() !== 'encontrado')
       .map((r) => ({ ...r, created_ts: Date.parse(r.created_at) || 0 }))
       .sort((a, b) => b.created_ts - a.created_ts)
 
@@ -233,7 +286,9 @@ function App() {
             username: authForm.username, 
             password: authForm.password, 
             email: authForm.email, 
-            rut: authForm.rut 
+            rut: authForm.rut,
+            first_name: authForm.first_name,
+            last_name: authForm.last_name,
           }
         : { username: authForm.username, password: authForm.password }
 
@@ -292,6 +347,7 @@ function App() {
     setBusy(true)
     setError('')
     setSuccess('')
+    let createdReportId = null
     try {
       if (!user) {
         navigate('/login?next=/reportar', { replace: false })
@@ -301,14 +357,14 @@ function App() {
       Object.keys(payload).forEach((k) => {
         if (typeof payload[k] === 'string') payload[k] = payload[k].trim()
       })
-      delete payload.image_file_name
+      delete payload.imagenes_locales
 
       if (!payload.pet_name) {
         setError('El nombre es obligatorio')
         return
       }
-      if (!payload.image_data_url) {
-        setError('La imagen es obligatoria')
+      if (!reportForm.imagenes_locales.length) {
+        setError('Debes subir al menos 1 imagen')
         return
       }
       if (!payload.species || !payload.region || !payload.comuna) {
@@ -353,8 +409,23 @@ function App() {
         return
       }
 
+      createdReportId = resp.data?.id ?? null
+      if (!createdReportId) {
+        setError('El reporte se creó sin identificador válido')
+        return
+      }
+
+      const imagenesSubidas = await subirImagenesReporte(createdReportId, reportForm.imagenes_locales)
+      const patchResp = await apiRequest(`/api/reports/${createdReportId}/`, {
+        method: 'PATCH',
+        body: { imagenes: imagenesSubidas },
+      })
+      if (!patchResp.ok) {
+        throw new Error('El reporte se creó, pero no se pudieron asociar las imágenes')
+      }
+
       setSuccess('Reporte enviado correctamente.')
-      setLastCreatedReportId(resp.data?.id ?? null)
+      setLastCreatedReportId(createdReportId)
       await loadReports()
       setReportForm((s) => ({
         ...s,
@@ -362,9 +433,15 @@ function App() {
         description: '',
         latitude: null,
         longitude: null,
-        image_data_url: '',
-        image_file_name: '',
+        imagenes_locales: [],
       }))
+    } catch (err) {
+      if (createdReportId) {
+        try {
+          await apiRequest(`/api/reports/${createdReportId}/`, { method: 'DELETE' })
+        } catch {}
+      }
+      setError(err?.message || 'No se pudo crear el reporte')
     } finally {
       setBusy(false)
     }
@@ -412,6 +489,8 @@ function App() {
 
         <Route path="/mapa" element={<PaginaMapa center={center} zoom={zoom} reports={reports} lastCreatedReportId={lastCreatedReportId} userLocation={userLocation} onViewDetail={handleViewDetail} />} />
         <Route path="/adopciones" element={<PaginaAdopciones user={user} />} />
+        <Route path="/adopciones/publicar" element={<PaginaPublicarAdopcion user={user} />} />
+        <Route path="/adopciones/:adoptionId" element={<PaginaAdopcionDetalle user={user} />} />
 
         <Route
           path="/reportar"
