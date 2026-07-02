@@ -25,7 +25,14 @@ def _codificar_jwt(payload: dict, secreto: str) -> str:
     return f'{encabezado_b64}.{carga_b64}.{firma_b64}'
 
 
-def crear_token_acceso(usuario_id: int, username: str = 'u', es_staff: bool = False, es_superuser: bool = False) -> str:
+def crear_token_acceso(
+    usuario_id: int,
+    username: str = 'u',
+    es_staff: bool = False,
+    es_superuser: bool = False,
+    role: str = 'usuario',
+    can_confirm_reports: bool = False,
+) -> str:
     ahora = int(time.time())
     payload = {
         'typ': 'access',
@@ -33,6 +40,8 @@ def crear_token_acceso(usuario_id: int, username: str = 'u', es_staff: bool = Fa
         'username': username,
         'is_staff': bool(es_staff),
         'is_superuser': bool(es_superuser),
+        'role': role,
+        'can_confirm_reports': bool(can_confirm_reports),
         'iat': ahora,
         'exp': ahora + 3600,
     }
@@ -115,6 +124,22 @@ class PruebasVisibilidadReportes(TestCase):
         resp3 = self.client.get(f'/api/reports/{self.unconfirmed.id}/', **encabezados_autorizacion(token_admin))
         self.assertEqual(resp3.status_code, 200)
         self.assertIn('image_data_url', resp3.json())
+
+    def test_veterinaria_puede_ver_y_listar_no_confirmados(self):
+        token_veterinaria = crear_token_acceso(
+            50,
+            username='vet',
+            role='veterinaria',
+            can_confirm_reports=True,
+        )
+        resp = self.client.get('/api/reports/?include_unconfirmed=1', **encabezados_autorizacion(token_veterinaria))
+        self.assertEqual(resp.status_code, 200)
+        ids = [r['id'] for r in resp.json()['results']]
+        self.assertIn(self.unconfirmed.id, ids)
+
+        detalle = self.client.get(f'/api/reports/{self.unconfirmed.id}/', **encabezados_autorizacion(token_veterinaria))
+        self.assertEqual(detalle.status_code, 200)
+        self.assertEqual(detalle.json()['id'], self.unconfirmed.id)
 
 
 class PruebasCrearYEditarReportes(TestCase):
@@ -251,6 +276,38 @@ class PruebasCrearYEditarReportes(TestCase):
         self.assertTrue(r.is_confirmed)
         self.assertIsNotNone(r.confirmed_at)
         self.assertEqual(r.confirmed_by, 'admin')
+
+    def test_veterinaria_puede_confirmar(self):
+        report = LostPetReport.objects.create(
+            pet_name='Luna',
+            species='Gato',
+            description='gris',
+            image_data_url='data:image/png;base64,AAAA',
+            region='Región Metropolitana de Santiago',
+            comuna='Macul',
+            latitude=-33.49,
+            longitude=-70.60,
+            status='perdido',
+            reporter_id=40,
+            is_confirmed=False,
+        )
+
+        token_veterinaria = crear_token_acceso(
+            88,
+            username='vet-centro',
+            role='veterinaria',
+            can_confirm_reports=True,
+        )
+        resp = self.client.patch(
+            f'/api/reports/{report.id}/',
+            data=json.dumps({'is_confirmed': True}),
+            content_type='application/json',
+            **encabezados_autorizacion(token_veterinaria),
+        )
+        self.assertEqual(resp.status_code, 200)
+        report.refresh_from_db()
+        self.assertTrue(report.is_confirmed)
+        self.assertEqual(report.confirmed_by, 'vet-centro')
 
     def test_eliminar_permisos(self):
         r = LostPetReport.objects.create(

@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 
-export default function DisposicionPublica({ user, isAdmin, busy, onLogout, year }) {
+export default function DisposicionPublica({ user, isAdmin, canModerateReports, busy, onLogout, year }) {
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
@@ -62,9 +62,9 @@ export default function DisposicionPublica({ user, isAdmin, busy, onLogout, year
             </nav>
 
             <div className="headerActions">
-              {isAdmin ? (
+              {canModerateReports ? (
                 <Link className="adminBtn" to="/admin">
-                  Dashboard
+                  Moderación
                 </Link>
               ) : null}
               

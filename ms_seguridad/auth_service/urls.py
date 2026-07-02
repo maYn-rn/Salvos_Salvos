@@ -1,5 +1,14 @@
 from django.urls import path
-from .views import login, logout, me, refresh, register, users
+from .views import (
+    login,
+    logout,
+    me,
+    refresh,
+    register,
+    users,
+    veterinaria_detail,
+    veterinarias,
+)
 
 urlpatterns = [
     path('api/auth/register/', register, name='register'), # Agregado /
@@ -8,4 +17,6 @@ urlpatterns = [
     path('api/auth/logout/', logout, name='logout'),     # Agregado /
     path('api/auth/me/', me, name='me'),               # Agregado /
     path('api/auth/users/', users, name='users'),       # Agregado /
+    path('api/auth/veterinarias/', veterinarias, name='veterinarias'),
+    path('api/auth/veterinarias/<int:veterinaria_id>/', veterinaria_detail, name='veterinaria_detail'),
 ]

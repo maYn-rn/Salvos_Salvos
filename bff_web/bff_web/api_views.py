@@ -57,12 +57,19 @@ def _forward(request, base_url: str):
 
 
 def _set_refresh_cookie(response, refresh_token: str):
+    cookie_secure = str(getattr(settings, 'REFRESH_COOKIE_SECURE', '') or '').strip().lower() in {'1', 'true', 'yes', 'si', 'sí'}
+    cookie_samesite = str(getattr(settings, 'REFRESH_COOKIE_SAMESITE', '') or '').strip().lower()
+    if cookie_samesite in {'none', 'lax', 'strict'}:
+        cookie_samesite = cookie_samesite.capitalize() if cookie_samesite != 'none' else 'None'
+    else:
+        cookie_samesite = 'Lax'
+
     response.set_cookie(
         'refresh_token',
         refresh_token,
         httponly=True,
-        samesite='Lax',
-        secure=False,
+        samesite=cookie_samesite,
+        secure=bool(cookie_secure),
         path='/api/auth',
         max_age=int(getattr(settings, 'JWT_REFRESH_TTL_SECONDS', 604800)),
     )
@@ -183,6 +190,18 @@ def auth_me(request):
 def auth_users(request):
     if request.method != 'GET':
         return HttpResponseNotAllowed(['GET'])
+    return _forward(request, settings.SECURITY_SERVICE_BASE_URL)
+
+
+def auth_veterinarias(request):
+    if request.method != 'GET':
+        return HttpResponseNotAllowed(['GET'])
+    return _forward(request, settings.SECURITY_SERVICE_BASE_URL)
+
+
+def auth_veterinaria_detail(request, veterinaria_id: int):
+    if request.method not in {'GET', 'PATCH'}:
+        return HttpResponseNotAllowed(['GET', 'PATCH'])
     return _forward(request, settings.SECURITY_SERVICE_BASE_URL)
 
 

@@ -1,6 +1,21 @@
 import L from 'leaflet'
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+function resolverApiBase() {
+  const fromEnv = import.meta.env.VITE_API_BASE_URL
+  if (fromEnv) return fromEnv
+
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return `${window.location.protocol}//${host}:8000`
+    }
+    return window.location.origin
+  }
+
+  return 'http://localhost:8000'
+}
+
+export const API_BASE = resolverApiBase()
 
 let accessToken = null
 
@@ -125,12 +140,17 @@ export async function apiRequest(path, { method = 'GET', body } = {}) {
 
 export async function refreshAccess() {
   const refreshToken = localStorage.getItem('refresh_token')
-  if (!refreshToken) return false
-
-  const resp = await apiRequest('/api/auth/refresh/', {
-    method: 'POST',
-    body: { refresh: refreshToken },
-  })
+  const resp = await apiRequest(
+    '/api/auth/refresh/',
+    refreshToken
+      ? {
+          method: 'POST',
+          body: { refresh: refreshToken },
+        }
+      : {
+          method: 'POST',
+        }
+  )
 
   if (!resp.ok || !resp.data?.access) {
     accessToken = null

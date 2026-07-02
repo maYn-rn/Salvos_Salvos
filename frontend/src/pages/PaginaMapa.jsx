@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CircleMarker, MapContainer, Popup, TileLayer, ZoomControl, useMapEvents } from 'react-leaflet'
+import { useNavigate } from 'react-router-dom'
 
 import { InvalidarTamanoMapa, RecentrarMapa, MarcadoresReportes } from '../components/map/AyudantesMapa'
-import { getComunasForRegion, normalizeSpecies, normalizeStatus, REGION_VIEW, SPECIES_OPTIONS } from '../shared/appCore'
+import { apiRequest, getComunasForRegion, normalizeSpecies, normalizeStatus, REGION_VIEW, SPECIES_OPTIONS } from '../shared/appCore'
 
 const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter'
 
@@ -158,7 +159,59 @@ function PuntosInteres({ enabled, kind, color, fillColor }) {
   )
 }
 
+function VeterinariasRegistradas({ enabled, onViewVeterinaria }) {
+  const [items, setItems] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!enabled) {
+      setItems([])
+      return undefined
+    }
+
+    ;(async () => {
+      const resp = await apiRequest('/api/auth/veterinarias/', { method: 'GET' })
+      if (cancelled) return
+      if (!resp.ok) {
+        setItems([])
+        return
+      }
+      setItems((resp.data?.results || []).filter((item) => item?.latitude != null && item?.longitude != null))
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [enabled])
+
+  if (!enabled) return null
+
+  return (
+    <>
+      {items.map((item) => (
+        <CircleMarker
+          key={item.id}
+          center={[Number(item.latitude), Number(item.longitude)]}
+          radius={7}
+          pathOptions={{ color: '#7c3aed', fillColor: '#8b5cf6', fillOpacity: 0.95 }}
+        >
+          <Popup>
+            <div style={{ fontWeight: 900 }}>{item.nombre_veterinaria}</div>
+            {item.direccion ? <div style={{ marginTop: '4px' }}>{item.direccion}</div> : null}
+            {item.comuna || item.region ? <div style={{ marginTop: '4px' }}>{[item.comuna, item.region].filter(Boolean).join(', ')}</div> : null}
+            {item.telefono ? <div style={{ marginTop: '4px' }}>{item.telefono}</div> : null}
+            <button className="miniBtn" type="button" style={{ marginTop: '8px' }} onClick={() => onViewVeterinaria(item.id)}>
+              Ver ficha
+            </button>
+          </Popup>
+        </CircleMarker>
+      ))}
+    </>
+  )
+}
+
 export default function PaginaMapa({ center, zoom, reports, lastCreatedReportId, userLocation, onViewDetail }) {
+  const navigate = useNavigate()
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('todos')
@@ -219,7 +272,7 @@ export default function PaginaMapa({ center, zoom, reports, lastCreatedReportId,
                 className={`mapOverlayBtn${showVets ? ' isActive' : ''}`}
                 onClick={() => setShowVets((v) => !v)}
               >
-                Veterinarios
+                Veterinarias
               </button>
               <button
                 type="button"
@@ -307,7 +360,7 @@ export default function PaginaMapa({ center, zoom, reports, lastCreatedReportId,
                 <RecentrarMapa center={mapCenter} zoom={mapZoom} />
                 <InvalidarTamanoMapa watch={`${filteredReports.length}-${filtersOpen}`} />
                 <MarcadoresReportes reports={filteredReports} highlightId={lastCreatedReportId} onSelectReport={onViewDetail} />
-                <PuntosInteres enabled={showVets} kind="veterinary" color="#0f7687" fillColor="#19a6b6" />
+                <VeterinariasRegistradas enabled={showVets} onViewVeterinaria={(id) => navigate(`/veterinarias/${id}`)} />
                 <PuntosInteres enabled={showShelters} kind="shelter" color="#f4a340" fillColor="#f4a340" />
                 {userLocation ? (
                   <CircleMarker

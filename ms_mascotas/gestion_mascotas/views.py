@@ -72,6 +72,12 @@ def _is_admin(payload: dict | None) -> bool:
         return False
     return bool(payload.get('is_superuser') or payload.get('is_staff'))
 
+
+def _puede_confirmar_reportes(payload: dict | None) -> bool:
+    if not payload:
+        return False
+    return bool(_is_admin(payload) or payload.get('can_confirm_reports') or payload.get('role') == 'veterinaria')
+
 def _normalize_status(value: str) -> str:
     raw = (value or '').strip().lower()
     if raw == 'lost':
@@ -181,7 +187,7 @@ def reports(request):
         ids_raw = (request.GET.get('ids') or '').strip()
 
         qs = LostPetReport.objects.all().order_by('-created_at')
-        if not (_is_admin(payload) and include_unconfirmed):
+        if not (_puede_confirmar_reportes(payload) and include_unconfirmed):
             qs = qs.filter(is_confirmed=True)
 
         if ids_raw:
@@ -331,7 +337,7 @@ def report_detail(request, report_id: int):
                 is_owner = int(payload.get('sub')) == report.reporter_id
             except (TypeError, ValueError):
                 is_owner = False
-            if _is_admin(payload) or is_owner:
+            if _puede_confirmar_reportes(payload) or is_owner:
                 return JsonResponse(_report_to_dict(report, include_image=True), status=200)
         return JsonResponse({'detail': 'not_found'}, status=404)
 
@@ -343,7 +349,7 @@ def report_detail(request, report_id: int):
         is_owner = int(payload.get('sub')) == report.reporter_id
     except (TypeError, ValueError):
         is_owner = False
-    is_admin = _is_admin(payload)
+    can_confirm_reports = _puede_confirmar_reportes(payload)
 
     if request.method in ['PATCH', 'PUT']:
         try:
@@ -352,7 +358,7 @@ def report_detail(request, report_id: int):
             return JsonResponse({'detail': 'invalid_json'}, status=400)
 
         only_marking_found = set(body.keys()) == {'status'} and _normalize_status(body.get('status')) == 'encontrado'
-        if not only_marking_found and not (is_admin or is_owner):
+        if not only_marking_found and not (can_confirm_reports or is_owner):
             return JsonResponse({'detail': 'forbidden'}, status=403)
 
         had_changes = False
@@ -440,7 +446,7 @@ def report_detail(request, report_id: int):
             report.confirmed_by = ''
 
         if 'is_confirmed' in body:
-            if not is_admin:
+            if not can_confirm_reports:
                 return JsonResponse({'detail': 'forbidden'}, status=403)
             desired = bool(body.get('is_confirmed'))
             if desired:
@@ -456,7 +462,7 @@ def report_detail(request, report_id: int):
         return JsonResponse(_report_to_dict(report, include_image=True), status=200)
 
     if request.method == 'DELETE':
-        if not (is_admin or is_owner):
+        if not (can_confirm_reports or is_owner):
             return JsonResponse({'detail': 'forbidden'}, status=403)
         report.delete()
         return HttpResponse(status=204)

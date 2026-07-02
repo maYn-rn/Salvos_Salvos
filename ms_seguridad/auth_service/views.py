@@ -10,12 +10,12 @@ from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
-from django.db import IntegrityError
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import RefreshToken
+from .models import RefreshToken, VeterinariaProfile
 
 
 def _b64url_encode(raw: bytes) -> str:
@@ -62,6 +62,65 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode('utf-8')).hexdigest()
 
 
+def _perfil_veterinaria(user):
+    try:
+        return user.perfil_veterinaria
+    except VeterinariaProfile.DoesNotExist:
+        return None
+
+
+def _rol_usuario(user) -> str:
+    if bool(getattr(user, 'is_superuser', False) or getattr(user, 'is_staff', False)):
+        return 'admin'
+    if _perfil_veterinaria(user) is not None:
+        return 'veterinaria'
+    return 'usuario'
+
+
+def _puede_confirmar_reportes(user) -> bool:
+    if bool(getattr(user, 'is_superuser', False) or getattr(user, 'is_staff', False)):
+        return True
+    perfil = _perfil_veterinaria(user)
+    return bool(
+        perfil
+        and perfil.activo
+        and perfil.puede_confirmar_reportes
+        and perfil.estado_verificacion == VeterinariaProfile.ESTADO_APROBADA
+    )
+
+
+def _perfil_veterinaria_publico(perfil: VeterinariaProfile, include_documento: bool = False) -> dict:
+    usuario = perfil.user
+    data = {
+        'id': perfil.id,
+        'user_id': perfil.user_id,
+        'nombre_veterinaria': perfil.nombre_veterinaria,
+        'telefono': perfil.telefono,
+        'region': perfil.region,
+        'comuna': perfil.comuna,
+        'direccion': perfil.direccion,
+        'descripcion': perfil.descripcion,
+        'sitio_web': perfil.sitio_web,
+        'latitude': perfil.latitude,
+        'longitude': perfil.longitude,
+        'activo': perfil.activo,
+        'puede_confirmar_reportes': perfil.puede_confirmar_reportes,
+        'estado_verificacion': perfil.estado_verificacion,
+        'comentario_revision': perfil.comentario_revision,
+        'verificado_por': perfil.verificado_por,
+        'verificado_en': perfil.verificado_en.isoformat() if perfil.verificado_en else None,
+        'owner_name': f'{getattr(usuario, "first_name", "")} {getattr(usuario, "last_name", "")}'.strip(),
+        'owner_email': getattr(usuario, 'email', '') or '',
+        'created_at': perfil.created_at.isoformat() if perfil.created_at else None,
+        'updated_at': perfil.updated_at.isoformat() if perfil.updated_at else None,
+    }
+    if include_documento:
+        data['documento_verificacion_archivo_id'] = perfil.documento_verificacion_archivo_id
+        data['documento_verificacion_url'] = perfil.documento_verificacion_url
+        data['documento_verificacion_nombre'] = perfil.documento_verificacion_nombre
+    return data
+
+
 def _issue_access_token(user) -> str:
     now = int(time.time())
     exp = now + int(settings.JWT_ACCESS_TTL_SECONDS)
@@ -71,6 +130,8 @@ def _issue_access_token(user) -> str:
         'username': user.get_username(),
         'is_staff': bool(getattr(user, 'is_staff', False)),
         'is_superuser': bool(getattr(user, 'is_superuser', False)),
+        'role': _rol_usuario(user),
+        'can_confirm_reports': _puede_confirmar_reportes(user),
         'iat': now,
         'exp': exp,
     }
@@ -133,6 +194,7 @@ def register(request):
     email = (body.get('email') or '').strip() or None
     first_name = (body.get('first_name') or '').strip()
     last_name = (body.get('last_name') or '').strip()
+    account_type = (body.get('account_type') or 'usuario').strip().lower() or 'usuario'
 
     if not username or not password:
         return JsonResponse({'detail': 'username_and_password_required'}, status=400)
@@ -143,20 +205,68 @@ def register(request):
     if not first_name or not last_name:
         return JsonResponse({'detail': 'first_and_last_name_required'}, status=400)
 
+    if account_type not in {'usuario', 'veterinaria'}:
+        return JsonResponse({'detail': 'invalid_account_type'}, status=400)
+
     try:
         validate_email(email)
     except ValidationError:
         return JsonResponse({'detail': 'invalid_email'}, status=400)
 
+    datos_veterinaria = None
+    if account_type == 'veterinaria':
+        nombre_veterinaria = (body.get('nombre_veterinaria') or '').strip()
+        telefono_veterinaria = (body.get('telefono_veterinaria') or '').strip()
+        region = (body.get('region') or '').strip()
+        comuna = (body.get('comuna') or '').strip()
+        direccion = (body.get('direccion_veterinaria') or body.get('direccion') or '').strip()
+        descripcion = (body.get('descripcion_veterinaria') or '').strip()
+        sitio_web = (body.get('sitio_web_veterinaria') or '').strip()
+        latitude_raw = body.get('latitude')
+        longitude_raw = body.get('longitude')
+
+        if sitio_web and not sitio_web.startswith(('http://', 'https://')):
+            sitio_web = f'https://{sitio_web}'
+
+        if not nombre_veterinaria or not telefono_veterinaria or not region or not comuna or not direccion:
+            return JsonResponse({'detail': 'veterinaria_fields_required'}, status=400)
+
+        try:
+            latitude = float(latitude_raw)
+            longitude = float(longitude_raw)
+        except (TypeError, ValueError):
+            return JsonResponse({'detail': 'invalid_lat_lng'}, status=400)
+
+        if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
+            return JsonResponse({'detail': 'invalid_lat_lng'}, status=400)
+
+        datos_veterinaria = {
+            'nombre_veterinaria': nombre_veterinaria[:180],
+            'telefono': telefono_veterinaria[:40],
+            'region': region[:120],
+            'comuna': comuna[:120],
+            'direccion': direccion[:220],
+            'descripcion': descripcion,
+            'sitio_web': sitio_web,
+            'latitude': latitude,
+            'longitude': longitude,
+            'activo': False,
+            'puede_confirmar_reportes': False,
+            'estado_verificacion': VeterinariaProfile.ESTADO_PENDIENTE,
+        }
+
     User = get_user_model()
     try:
-        user = User.objects.create_user(
-            username=username,
-            password=password,
-            email=email,
-            first_name=first_name[:150],
-            last_name=last_name[:150],
-        )
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=username,
+                password=password,
+                email=email,
+                first_name=first_name[:150],
+                last_name=last_name[:150],
+            )
+            if datos_veterinaria is not None:
+                VeterinariaProfile.objects.create(user=user, **datos_veterinaria)
     except IntegrityError:
         return JsonResponse({'detail': 'username_already_exists'}, status=409)
 
@@ -280,6 +390,7 @@ def me(request):
         user = User.objects.get(id=int(payload.get('sub')))
     except Exception:
         return JsonResponse({'detail': 'invalid_access'}, status=401)
+    perfil_veterinaria = _perfil_veterinaria(user)
 
     return JsonResponse(
         {
@@ -290,6 +401,9 @@ def me(request):
             'last_name': getattr(user, 'last_name', '') or '',
             'is_staff': bool(getattr(user, 'is_staff', False)),
             'is_superuser': bool(getattr(user, 'is_superuser', False)),
+            'role': _rol_usuario(user),
+            'can_confirm_reports': _puede_confirmar_reportes(user),
+            'veterinaria': _perfil_veterinaria_publico(perfil_veterinaria, include_documento=True) if perfil_veterinaria else None,
             'is_active': bool(getattr(user, 'is_active', True)),
             'date_joined': user.date_joined.isoformat() if getattr(user, 'date_joined', None) else None,
         },
@@ -322,7 +436,7 @@ def users(request):
     if not (getattr(requester, 'is_staff', False) or getattr(requester, 'is_superuser', False)):
         return JsonResponse({'detail': 'forbidden'}, status=403)
 
-    qs = User.objects.all().order_by('-date_joined')[:500]
+    qs = User.objects.all().select_related('perfil_veterinaria').order_by('-date_joined')[:500]
     data = [
         {
             'id': u.id,
@@ -332,10 +446,140 @@ def users(request):
             'last_name': getattr(u, 'last_name', '') or '',
             'is_staff': bool(getattr(u, 'is_staff', False)),
             'is_superuser': bool(getattr(u, 'is_superuser', False)),
+            'role': _rol_usuario(u),
+            'can_confirm_reports': _puede_confirmar_reportes(u),
+            'veterinaria': _perfil_veterinaria_publico(u.perfil_veterinaria, include_documento=True) if _perfil_veterinaria(u) else None,
             'is_active': bool(getattr(u, 'is_active', True)),
             'date_joined': u.date_joined.isoformat() if getattr(u, 'date_joined', None) else None,
         }
         for u in qs
     ]
     return JsonResponse({'results': data}, status=200)
+
+
+def veterinarias(request):
+    if request.method != 'GET':
+        return HttpResponseNotAllowed(['GET'])
+
+    perfiles = (
+        VeterinariaProfile.objects.select_related('user')
+        .filter(activo=True, estado_verificacion=VeterinariaProfile.ESTADO_APROBADA)
+        .order_by('nombre_veterinaria')[:500]
+    )
+    return JsonResponse({'results': [_perfil_veterinaria_publico(perfil) for perfil in perfiles]}, status=200)
+
+
+def veterinaria_detail(request, veterinaria_id: int):
+    if request.method == 'GET':
+        payload = _get_bearer_token(request)
+        payload_decoded = None
+        if payload is not None:
+            try:
+                payload_decoded = _jwt_decode(payload, settings.JWT_SECRET)
+            except ValueError:
+                payload_decoded = None
+
+        try:
+            perfil = VeterinariaProfile.objects.select_related('user').get(id=veterinaria_id)
+        except VeterinariaProfile.DoesNotExist:
+            return JsonResponse({'detail': 'not_found'}, status=404)
+
+        puede_ver_privado = False
+        if payload_decoded and payload_decoded.get('typ') == 'access':
+            try:
+                user_id = int(payload_decoded.get('sub'))
+            except (TypeError, ValueError):
+                user_id = None
+            puede_ver_privado = bool(
+                user_id == perfil.user_id
+                or payload_decoded.get('is_staff')
+                or payload_decoded.get('is_superuser')
+            )
+
+        if not puede_ver_privado and not (perfil.activo and perfil.estado_verificacion == VeterinariaProfile.ESTADO_APROBADA):
+            return JsonResponse({'detail': 'not_found'}, status=404)
+
+        return JsonResponse(_perfil_veterinaria_publico(perfil, include_documento=puede_ver_privado), status=200)
+
+    if request.method == 'PATCH':
+        token = _get_bearer_token(request)
+        if token is None:
+            return JsonResponse({'detail': 'missing_access'}, status=401)
+
+        try:
+            payload = _jwt_decode(token, settings.JWT_SECRET)
+        except ValueError:
+            return JsonResponse({'detail': 'invalid_access'}, status=401)
+
+        if payload.get('typ') != 'access':
+            return JsonResponse({'detail': 'invalid_access'}, status=401)
+
+        try:
+            perfil = VeterinariaProfile.objects.select_related('user').get(id=veterinaria_id)
+        except VeterinariaProfile.DoesNotExist:
+            return JsonResponse({'detail': 'not_found'}, status=404)
+
+        try:
+            body = _read_json(request)
+        except json.JSONDecodeError:
+            return JsonResponse({'detail': 'invalid_json'}, status=400)
+
+        try:
+            requester_id = int(payload.get('sub'))
+        except (TypeError, ValueError):
+            requester_id = None
+
+        es_admin = bool(payload.get('is_staff') or payload.get('is_superuser'))
+        es_dueno = requester_id == perfil.user_id
+
+        if not (es_admin or es_dueno):
+            return JsonResponse({'detail': 'forbidden'}, status=403)
+
+        if es_dueno:
+            archivo_id = body.get('documento_verificacion_archivo_id')
+            archivo_url = (body.get('documento_verificacion_url') or '').strip()
+            archivo_nombre = (body.get('documento_verificacion_nombre') or '').strip()
+            if not archivo_id or not archivo_url:
+                return JsonResponse({'detail': 'documento_verificacion_requerido'}, status=400)
+            try:
+                perfil.documento_verificacion_archivo_id = int(archivo_id)
+            except (TypeError, ValueError):
+                return JsonResponse({'detail': 'documento_verificacion_requerido'}, status=400)
+            perfil.documento_verificacion_url = archivo_url
+            perfil.documento_verificacion_nombre = archivo_nombre[:220]
+            perfil.estado_verificacion = VeterinariaProfile.ESTADO_PENDIENTE
+            perfil.activo = False
+            perfil.puede_confirmar_reportes = False
+            perfil.comentario_revision = ''
+            perfil.verificado_por = ''
+            perfil.verificado_en = None
+            perfil.save()
+            return JsonResponse(_perfil_veterinaria_publico(perfil, include_documento=True), status=200)
+
+        estado = (body.get('estado_verificacion') or '').strip().lower()
+        comentario = (body.get('comentario_revision') or '').strip()
+        if estado not in {
+            VeterinariaProfile.ESTADO_PENDIENTE,
+            VeterinariaProfile.ESTADO_APROBADA,
+            VeterinariaProfile.ESTADO_RECHAZADA,
+        }:
+            return JsonResponse({'detail': 'estado_verificacion_invalido'}, status=400)
+
+        if estado == VeterinariaProfile.ESTADO_APROBADA and not perfil.documento_verificacion_archivo_id:
+            return JsonResponse({'detail': 'documento_verificacion_requerido'}, status=400)
+
+        perfil.estado_verificacion = estado
+        perfil.comentario_revision = comentario
+        perfil.verificado_por = (payload.get('username') or '').strip()
+        perfil.verificado_en = timezone.now()
+        if estado == VeterinariaProfile.ESTADO_APROBADA:
+            perfil.activo = True
+            perfil.puede_confirmar_reportes = True
+        else:
+            perfil.activo = False
+            perfil.puede_confirmar_reportes = False
+        perfil.save()
+        return JsonResponse(_perfil_veterinaria_publico(perfil, include_documento=True), status=200)
+
+    return HttpResponseNotAllowed(['GET', 'PATCH'])
 

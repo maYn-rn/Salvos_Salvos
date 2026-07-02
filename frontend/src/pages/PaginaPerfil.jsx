@@ -3,8 +3,18 @@ import { Link, Navigate } from 'react-router-dom'
 
 import { apiRequest, formatDateShort, normalizeSpecies, normalizeStatus } from '../shared/appCore'
 
-export default function PaginaPerfil({ user, reports, onLogout, busy, onMarkFound, onViewDetail }) {
+export default function PaginaPerfil({ user, authInicializando, reports, onLogout, busy, onMarkFound, onViewDetail }) {
   if (!user) {
+    if (authInicializando) {
+      return (
+        <div className="mainInner">
+          <section className="card">
+            <h2 className="cardTitle">Perfil</h2>
+            <div className="mutedText">Cargando sesión…</div>
+          </section>
+        </div>
+      )
+    }
     return <Navigate to="/login?next=/perfil" replace />
   }
 
@@ -129,9 +139,37 @@ export default function PaginaPerfil({ user, reports, onLogout, busy, onMarkFoun
           ) : (
             <button className="miniBtn" style={{ marginBottom: '12px', width: '100%', display: 'block', padding: '10px' }} type="button" onClick={() => setIsEditing(true)}>Editar Perfil</button>
           )}
-          <button className="primaryBtn" style={{ backgroundColor: '#e03131', border: 'none', width: '100%' }} type="button" disabled={busy} onClick={onLogout}>Cerrar Sesión</button>
+          <button className="primaryBtn danger" style={{ width: '100%' }} type="button" disabled={busy} onClick={onLogout}>Cerrar Sesión</button>
         </div>
       </section>
+
+      {user?.role === 'veterinaria' && user?.veterinaria ? (
+        <section className="card" style={{ marginBottom: '28px' }}>
+          <h3 className="cardTitle" style={{ marginTop: 0 }}>Estado de verificación de veterinaria</h3>
+          <div className="mutedText" style={{ marginBottom: '12px' }}>
+            {user.veterinaria.estado_verificacion === 'aprobada'
+              ? 'Tu veterinaria está aprobada y ya puede aparecer en el mapa y confirmar reportes.'
+              : user.veterinaria.estado_verificacion === 'rechazada'
+                ? 'La solicitud fue rechazada. Revisa el comentario del administrador.'
+                : 'Tu solicitud está pendiente. Un administrador revisará el documento antes de activarte.'}
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span className="boPill">
+              Estado: {user.veterinaria.estado_verificacion || 'pendiente'}
+            </span>
+            {user.veterinaria.documento_verificacion_url ? (
+              <a className="miniBtn" href={user.veterinaria.documento_verificacion_url} target="_blank" rel="noreferrer">
+                Ver documento enviado
+              </a>
+            ) : null}
+          </div>
+          {user.veterinaria.comentario_revision ? (
+            <div className="formError" style={{ marginTop: '12px' }}>
+              Comentario admin: {user.veterinaria.comentario_revision}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <h2 className="cardTitle" style={{ marginBottom: '20px' }}>Mis Reportes</h2>
 

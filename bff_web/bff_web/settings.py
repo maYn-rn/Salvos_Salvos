@@ -189,3 +189,6 @@ CORS_ALLOWED_ORIGINS = [
     ).split(',')
     if origin.strip()
 ]
+
+REFRESH_COOKIE_SECURE = os.environ.get('REFRESH_COOKIE_SECURE', '')
+REFRESH_COOKIE_SAMESITE = os.environ.get('REFRESH_COOKIE_SAMESITE', '')

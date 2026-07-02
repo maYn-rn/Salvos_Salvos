@@ -10,6 +10,8 @@ export default function PaginaReporte({
   success,
   busy,
   reportForm,
+  ubicacionTexto,
+  buscandoUbicacion,
   reports,
   reportCenter,
   reportZoom,
@@ -17,6 +19,9 @@ export default function PaginaReporte({
   userLocation,
   onSubmitReport,
   onReportFormChange,
+  onUbicacionTextoChange,
+  onBuscarUbicacionTexto,
+  onUsarUbicacionDispositivo,
   onSelectRegion,
   onImageChange,
   onClearSuccess,
@@ -85,6 +90,32 @@ export default function PaginaReporte({
                   </select>
                 </label>
                 <label className="field">
+                  <span>Ubicación por texto (opcional)</span>
+                  <input
+                    value={ubicacionTexto || ''}
+                    onChange={(e) => onUbicacionTextoChange(e.target.value)}
+                    placeholder="Ej: Av. Providencia 1234 (se busca automáticamente)"
+                  />
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
+                    <button
+                      className="miniBtn"
+                      type="button"
+                      disabled={busy || buscandoUbicacion}
+                      onClick={onBuscarUbicacionTexto}
+                    >
+                      {buscandoUbicacion ? 'Buscando…' : 'Buscar ahora'}
+                    </button>
+                    <button
+                      className="miniBtn"
+                      type="button"
+                      disabled={busy || buscandoUbicacion}
+                      onClick={onUsarUbicacionDispositivo}
+                    >
+                      Usar ubicación del dispositivo
+                    </button>
+                  </div>
+                </label>
+                <label className="field">
                   <span>Imágenes *</span>
                   <input type="file" accept="image/*" multiple onChange={onImageChange} required />
                   <span className="fileHint">
@@ -126,7 +157,7 @@ export default function PaginaReporte({
                 </label>
 
                 <div className="mutedText">
-                  Ubicación: {reportForm.latitude != null && reportForm.longitude != null ? `${reportForm.latitude.toFixed(6)}, ${reportForm.longitude.toFixed(6)}` : 'haz click en el mapa'}
+                  Ubicación: {reportForm.latitude != null && reportForm.longitude != null ? `${Number(reportForm.latitude).toFixed(6)}, ${Number(reportForm.longitude).toFixed(6)}` : 'haz click en el mapa o usa los botones de ubicación'}
                 </div>
                 <button className="primaryBtn" type="submit" disabled={busy}>Publicar reporte</button>
               </form>

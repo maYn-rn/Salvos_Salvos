@@ -7,14 +7,22 @@ import time
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 
-from .models import RefreshToken
+from .models import RefreshToken, VeterinariaProfile
 
 
 def _b64url(texto: bytes) -> str:
     return base64.urlsafe_b64encode(texto).rstrip(b'=').decode('ascii')
 
 
-def _crear_token_acceso(secreto: str, sub: int, username: str = 'usuario', es_admin: bool = False, exp_segundos: int = 3600):
+def _crear_token_acceso(
+    secreto: str,
+    sub: int,
+    username: str = 'usuario',
+    es_admin: bool = False,
+    exp_segundos: int = 3600,
+    role: str = 'usuario',
+    can_confirm_reports: bool = False,
+):
     ahora = int(time.time())
     payload = {
         'typ': 'access',
@@ -22,6 +30,8 @@ def _crear_token_acceso(secreto: str, sub: int, username: str = 'usuario', es_ad
         'username': username,
         'is_staff': bool(es_admin),
         'is_superuser': bool(es_admin),
+        'role': role,
+        'can_confirm_reports': bool(can_confirm_reports),
         'iat': ahora,
         'exp': ahora + int(exp_segundos),
     }
@@ -152,3 +162,99 @@ class PruebasFlujosAutenticacion(TestCase):
         resp = self.client.get('/api/auth/users/', HTTP_AUTHORIZATION=f'Bearer {token_admin}')
         self.assertEqual(resp.status_code, 200)
         self.assertIn('results', resp.json())
+
+    def test_registro_veterinaria_y_endpoints_publicos(self):
+        resp = self.client.post(
+            '/api/auth/register/',
+            data=json.dumps(
+                {
+                    'username': 'vet-centro',
+                    'password': 'Clave12345',
+                    'email': 'contacto@vetcentro.cl',
+                    'first_name': 'Ana',
+                    'last_name': 'Perez',
+                    'account_type': 'veterinaria',
+                    'nombre_veterinaria': 'Veterinaria Centro',
+                    'telefono_veterinaria': '+56912345678',
+                    'region': 'Región Metropolitana de Santiago',
+                    'comuna': 'Santiago',
+                    'direccion_veterinaria': 'Alameda 1234',
+                    'descripcion_veterinaria': 'Urgencias, vacunas y peluquería.',
+                    'sitio_web_veterinaria': 'vetcentro.cl',
+                    'latitude': -33.4489,
+                    'longitude': -70.6693,
+                }
+            ),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 201)
+        payload = resp.json()
+        self.assertIn('access', payload)
+
+        resp_login = self.client.post(
+            '/api/auth/login/',
+            data=json.dumps({'username': 'vet-centro', 'password': 'Clave12345'}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp_login.status_code, 200)
+        token = resp_login.json()['access']
+
+        resp_me = self.client.get('/api/auth/me/', HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.assertEqual(resp_me.status_code, 200)
+        data_me = resp_me.json()
+        self.assertEqual(data_me['role'], 'veterinaria')
+        self.assertFalse(data_me['can_confirm_reports'])
+        self.assertEqual(data_me['veterinaria']['nombre_veterinaria'], 'Veterinaria Centro')
+        self.assertEqual(data_me['veterinaria']['sitio_web'], 'https://vetcentro.cl')
+        self.assertEqual(data_me['veterinaria']['estado_verificacion'], 'pendiente')
+
+        resp_lista = self.client.get('/api/auth/veterinarias/')
+        self.assertEqual(resp_lista.status_code, 200)
+        self.assertEqual(resp_lista.json()['results'], [])
+
+        perfil = VeterinariaProfile.objects.get(user__username='vet-centro')
+        resp_detalle_publico = self.client.get(f'/api/auth/veterinarias/{perfil.id}/')
+        self.assertEqual(resp_detalle_publico.status_code, 404)
+
+        resp_subida_doc = self.client.patch(
+            f'/api/auth/veterinarias/{perfil.id}/',
+            data=json.dumps(
+                {
+                    'documento_verificacion_archivo_id': 55,
+                    'documento_verificacion_url': 'http://localhost:8000/api/archivos/55/descargar/',
+                    'documento_verificacion_nombre': 'patente-vet.jpg',
+                }
+            ),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {token}',
+        )
+        self.assertEqual(resp_subida_doc.status_code, 200)
+        self.assertEqual(resp_subida_doc.json()['estado_verificacion'], 'pendiente')
+
+        admin = get_user_model().objects.create_user(
+            username='admin-vet',
+            password='Clave12345',
+            email='adminvet@ejemplo.com',
+            first_name='Admin',
+            last_name='Vet',
+            is_staff=True,
+        )
+        token_admin = _crear_token_acceso('secreto-pruebas', admin.id, username='admin-vet', es_admin=True)
+        resp_aprobar = self.client.patch(
+            f'/api/auth/veterinarias/{perfil.id}/',
+            data=json.dumps({'estado_verificacion': 'aprobada'}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {token_admin}',
+        )
+        self.assertEqual(resp_aprobar.status_code, 200)
+        self.assertEqual(resp_aprobar.json()['estado_verificacion'], 'aprobada')
+
+        resp_lista2 = self.client.get('/api/auth/veterinarias/')
+        self.assertEqual(resp_lista2.status_code, 200)
+        lista = resp_lista2.json()['results']
+        self.assertEqual(len(lista), 1)
+        self.assertEqual(lista[0]['nombre_veterinaria'], 'Veterinaria Centro')
+
+        resp_detalle = self.client.get(f"/api/auth/veterinarias/{lista[0]['id']}/")
+        self.assertEqual(resp_detalle.status_code, 200)
+        self.assertEqual(resp_detalle.json()['owner_name'], 'Ana Perez')

@@ -1565,7 +1565,7 @@ a {
 }
 
 .authCard {
-  max-width: 420px;
+  max-width: 980px;
   margin: 0 auto;
 }
 
@@ -1608,6 +1608,15 @@ a {
   gap: 12px;
 }
 
+.registerForm {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.registerFormFull {
+  grid-column: 1 / -1;
+}
+
 .field {
   display: grid;
   gap: 6px;
@@ -1647,6 +1656,34 @@ a {
   border: 1px solid rgba(15, 118, 135, 0.28);
   background: rgba(255, 255, 255, 0.9);
   outline: none;
+}
+
+.field select,
+.field textarea {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 118, 135, 0.28);
+  background: rgba(255, 255, 255, 0.9);
+  outline: none;
+  font: inherit;
+  color: inherit;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+@media (max-width: 860px) {
+  .registerForm {
+    grid-template-columns: 1fr;
+  }
+
+  .registerFormFull {
+    grid-column: auto;
+  }
 }
 
 .field input::placeholder {
@@ -1738,6 +1775,12 @@ a {
   color: var(--white);
   font-weight: 800;
   cursor: pointer;
+}
+
+.primaryBtn.danger {
+  border-color: rgba(186, 45, 45, 0.35);
+  background: linear-gradient(90deg, #c92a2a, #e03131);
+  color: var(--white);
 }
 
 .primaryBtn:disabled {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import 'leaflet/dist/leaflet.css'
 
@@ -13,6 +13,7 @@ import PaginaPreguntasFrecuentes from './pages/PaginaPreguntasFrecuentes'
 import PaginaPerfil from './pages/PaginaPerfil'
 import PaginaRegistro from './pages/PaginaRegistro'
 import PaginaReporte from './pages/PaginaReporte'
+import PaginaVeterinariaDetalle from './pages/PaginaVeterinariaDetalle'
 // 1. IMPORTAMOS LA PÁGINA REAL DE VOLUNTARIOS
 import PaginaVoluntarios from './pages/PaginaVoluntarios' 
 import { apiRequest, haversineKm, optimizeImageFileToDataUrl, refreshAccess, REGION_VIEW, setAccessToken } from './shared/appCore'
@@ -25,8 +26,27 @@ function App() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [userLocation, setUserLocation] = useState(null)
   const [user, setUser] = useState(null)
+  const [authInicializando, setAuthInicializando] = useState(true)
   const [authMode, setAuthMode] = useState('login')
-  const [authForm, setAuthForm] = useState({ username: '', password: '', email: '', rut: '', first_name: '', last_name: '' })
+  const [authForm, setAuthForm] = useState({
+    username: '',
+    password: '',
+    email: '',
+    rut: '',
+    first_name: '',
+    last_name: '',
+    account_type: 'usuario',
+    nombre_veterinaria: '',
+    telefono_veterinaria: '',
+    region: '',
+    comuna: '',
+    direccion_veterinaria: '',
+    descripcion_veterinaria: '',
+    sitio_web_veterinaria: '',
+    documento_verificacion_local: null,
+    latitude: null,
+    longitude: null,
+  })
   const [reports, setReports] = useState([])
   const [lastCreatedReportId, setLastCreatedReportId] = useState(null)
   const [reportForm, setReportForm] = useState({
@@ -43,12 +63,17 @@ function App() {
     latitude: null,
     longitude: null,
   })
+  const [ubicacionTexto, setUbicacionTexto] = useState('')
+  const [buscandoUbicacion, setBuscandoUbicacion] = useState(false)
   const [success, setSuccess] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const busquedaUbicacionTimeoutRef = useRef(null)
+  const busquedaUbicacionAbortRef = useRef(null)
   const navigate = useNavigate()
   const location = useLocation()
   const isAdmin = Boolean(user?.is_staff || user?.is_superuser)
+  const canModerateReports = Boolean(user?.is_staff || user?.is_superuser || user?.can_confirm_reports)
 
   useEffect(() => {
     if (!('geolocation' in navigator)) return
@@ -68,10 +93,19 @@ function App() {
 
   useEffect(() => {
     ;(async () => {
-      const ok = await refreshAccess()
-      if (!ok) return
-      const me = await apiRequest('/api/auth/me/', { method: 'GET' })
-      if (me.ok) setUser(me.data)
+      setAuthInicializando(true)
+      try {
+        const ok = await refreshAccess()
+        if (!ok) {
+          setUser(null)
+          return
+        }
+        const me = await apiRequest('/api/auth/me/', { method: 'GET' })
+        if (me.ok) setUser(me.data)
+        else setUser(null)
+      } finally {
+        setAuthInicializando(false)
+      }
     })()
   }, [])
 
@@ -133,8 +167,19 @@ function App() {
     return REGION_VIEW[reportForm.region] || null
   }, [reportForm.region])
 
-  const reportCenter = reportRegionView ? reportRegionView.center : center
-  const reportZoom = reportRegionView ? reportRegionView.zoom : zoom
+  const reportCenter =
+    reportForm.latitude != null && reportForm.longitude != null
+      ? [Number(reportForm.latitude), Number(reportForm.longitude)]
+      : reportRegionView
+        ? reportRegionView.center
+        : center
+
+  const reportZoom =
+    reportForm.latitude != null && reportForm.longitude != null
+      ? 15
+      : reportRegionView
+        ? reportRegionView.zoom
+        : zoom
 
   function onSelectRegion(value) {
     setReportForm((s) => ({ ...s, region: value, comuna: '' }))
@@ -143,6 +188,119 @@ function App() {
   function updateReportForm(patch) {
     setReportForm((s) => ({ ...s, ...patch }))
   }
+
+  async function usarUbicacionDispositivoParaReporte() {
+    if (!('geolocation' in navigator)) {
+      setError('Tu dispositivo no soporta geolocalización')
+      return
+    }
+
+    setError('')
+    setSuccess('')
+    setBuscandoUbicacion(true)
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve(pos),
+          (err) => reject(err),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        )
+      })
+      const lat = pos.coords.latitude
+      const lng = pos.coords.longitude
+      const accuracy = pos.coords.accuracy
+      setUserLocation({ lat, lng, accuracy })
+      setReportForm((s) => ({ ...s, latitude: lat, longitude: lng }))
+      setSuccess('Ubicación del dispositivo aplicada al reporte.')
+    } catch {
+      setError('No se pudo obtener la ubicación del dispositivo. Verifica permisos.')
+    } finally {
+      setBuscandoUbicacion(false)
+    }
+  }
+
+  async function buscarUbicacionPorTexto(textoEntrada, { mostrarErrores = true } = {}) {
+    const texto = (textoEntrada ?? ubicacionTexto ?? '').trim()
+    if (!texto) {
+      if (mostrarErrores) setError('Ingresa una ubicación por texto para buscarla.')
+      return
+    }
+
+    if (texto.length < 4) {
+      if (mostrarErrores) setError('La búsqueda necesita al menos 4 caracteres.')
+      return
+    }
+
+    if (busquedaUbicacionAbortRef.current) {
+      try {
+        busquedaUbicacionAbortRef.current.abort()
+      } catch {}
+    }
+
+    const controller = new AbortController()
+    busquedaUbicacionAbortRef.current = controller
+
+    if (mostrarErrores) {
+      setError('')
+      setSuccess('')
+    } else {
+      setError('')
+    }
+    setBuscandoUbicacion(true)
+    try {
+      const partes = [texto]
+      if ((reportForm.comuna || '').trim()) partes.push(reportForm.comuna)
+      if ((reportForm.region || '').trim()) partes.push(reportForm.region)
+      partes.push('Chile')
+      const q = partes.join(', ')
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=cl&q=${encodeURIComponent(q)}`
+      const resp = await fetch(url, { headers: { 'Accept-Language': 'es' }, signal: controller.signal })
+      const data = await resp.json().catch(() => [])
+      const item = Array.isArray(data) ? data[0] : null
+      if (!item || item.lat == null || item.lon == null) {
+        if (mostrarErrores) setError('No se encontró la ubicación. Prueba con más detalle (ej: calle y comuna).')
+        return
+      }
+
+      const lat = Number(item.lat)
+      const lng = Number(item.lon)
+      if (Number.isNaN(lat) || Number.isNaN(lng)) {
+        if (mostrarErrores) setError('La búsqueda devolvió coordenadas inválidas.')
+        return
+      }
+
+      setReportForm((s) => ({ ...s, latitude: lat, longitude: lng }))
+      if (mostrarErrores) setSuccess('Ubicación encontrada y aplicada en el mapa.')
+    } catch (err) {
+      if (err?.name === 'AbortError') return
+      if (mostrarErrores) setError('No se pudo buscar la ubicación. Revisa tu conexión a internet.')
+    } finally {
+      if (busquedaUbicacionAbortRef.current === controller) {
+        setBuscandoUbicacion(false)
+      }
+    }
+  }
+
+  useEffect(() => {
+    const texto = (ubicacionTexto || '').trim()
+    if (!texto) return
+    if (texto.length < 4) return
+    if (busy) return
+
+    if (busquedaUbicacionTimeoutRef.current) {
+      clearTimeout(busquedaUbicacionTimeoutRef.current)
+    }
+
+    busquedaUbicacionTimeoutRef.current = setTimeout(() => {
+      buscarUbicacionPorTexto(texto, { mostrarErrores: false })
+    }, 650)
+
+    return () => {
+      if (busquedaUbicacionTimeoutRef.current) {
+        clearTimeout(busquedaUbicacionTimeoutRef.current)
+      }
+    }
+  }, [ubicacionTexto, reportForm.region, reportForm.comuna])
 
   function updateAuthForm(patch) {
     setAuthForm((s) => ({ ...s, ...patch }))
@@ -221,6 +379,41 @@ function App() {
     return imagenesSubidas
   }
 
+  async function subirDocumentoVerificacion(veterinaria, documentoLocal) {
+    if (!veterinaria?.user_id || !documentoLocal?.contenido_base64) {
+      throw new Error('Debes adjuntar un documento de verificación válido')
+    }
+
+    const resp = await apiRequest('/api/archivos/', {
+      method: 'POST',
+      body: {
+        tipo_entidad: 'veterinaria_verificacion',
+        id_entidad: veterinaria.user_id,
+        categoria: 'verificacion',
+        orden: 1,
+        servicio_origen: 'ms_seguridad',
+        nombre_original: documentoLocal.nombre_original,
+        contenido_base64: documentoLocal.contenido_base64,
+      },
+    })
+    if (!resp.ok || !resp.data?.id || !resp.data?.url_descarga) {
+      throw new Error(resp.data?.detail || 'No se pudo subir el documento de verificación')
+    }
+
+    const vincularResp = await apiRequest(`/api/auth/veterinarias/${veterinaria.id}/`, {
+      method: 'PATCH',
+      body: {
+        documento_verificacion_archivo_id: resp.data.id,
+        documento_verificacion_url: resp.data.url_descarga,
+        documento_verificacion_nombre: resp.data.nombre_original || documentoLocal.nombre_original,
+      },
+    })
+    if (!vincularResp.ok) {
+      throw new Error(vincularResp.data?.detail || 'No se pudo asociar el documento de verificación')
+    }
+    return vincularResp.data
+  }
+
   const nearbyRecentReports = useMemo(() => {
     const parsed = (reports || [])
       .filter((r) => r && r.created_at)
@@ -277,6 +470,23 @@ function App() {
         setBusy(false)
         return
       }
+      if ((authForm.account_type || 'usuario') === 'veterinaria') {
+        if (!authForm.nombre_veterinaria || !authForm.telefono_veterinaria || !authForm.region || !authForm.comuna || !authForm.direccion_veterinaria) {
+          setError('Completa todos los datos principales de la veterinaria')
+          setBusy(false)
+          return
+        }
+        if (!authForm.documento_verificacion_local?.contenido_base64) {
+          setError('Debes adjuntar un documento o imagen que respalde la veterinaria')
+          setBusy(false)
+          return
+        }
+        if (authForm.latitude == null || authForm.longitude == null) {
+          setError('Debes fijar la ubicación de la veterinaria con dirección o ubicación actual')
+          setBusy(false)
+          return
+        }
+      }
     }
 
     try {
@@ -289,6 +499,16 @@ function App() {
             rut: authForm.rut,
             first_name: authForm.first_name,
             last_name: authForm.last_name,
+            account_type: authForm.account_type || 'usuario',
+            nombre_veterinaria: authForm.nombre_veterinaria,
+            telefono_veterinaria: authForm.telefono_veterinaria,
+            region: authForm.region,
+            comuna: authForm.comuna,
+            direccion_veterinaria: authForm.direccion_veterinaria,
+            descripcion_veterinaria: authForm.descripcion_veterinaria,
+            sitio_web_veterinaria: authForm.sitio_web_veterinaria,
+            latitude: authForm.latitude,
+            longitude: authForm.longitude,
           }
         : { username: authForm.username, password: authForm.password }
 
@@ -301,9 +521,23 @@ function App() {
       setAccessToken(resp.data.access)
       if (resp.data?.refresh) localStorage.setItem('refresh_token', resp.data.refresh)
       const me = await apiRequest('/api/auth/me/', { method: 'GET' })
-      if (me.ok) setUser(me.data)
-      const next = new URLSearchParams(location.search).get('next') || '/'
+      let currentUser = null
+      if (me.ok) {
+        currentUser = me.data
+        if (authMode === 'register' && currentUser?.role === 'veterinaria') {
+          currentUser = await subirDocumentoVerificacion(currentUser.veterinaria, authForm.documento_verificacion_local)
+            .then(() => apiRequest('/api/auth/me/', { method: 'GET' }))
+            .then((updatedMe) => (updatedMe.ok ? updatedMe.data : currentUser))
+          setSuccess('Registro enviado. La veterinaria quedará pendiente hasta que un administrador revise el documento.')
+        }
+        setUser(currentUser)
+      }
+      const next =
+        new URLSearchParams(location.search).get('next') ||
+        (authMode === 'register' && currentUser?.role === 'veterinaria' ? '/perfil' : '/')
       navigate(next, { replace: true })
+    } catch (err) {
+      setError(err?.message || 'No se pudo completar la autenticación')
     } finally {
       setBusy(false)
     }
@@ -372,7 +606,7 @@ function App() {
         return
       }
       if (payload.latitude == null || payload.longitude == null) {
-        setError('Selecciona una ubicacion en el mapa')
+        setError('Selecciona una ubicación en el mapa o usa tu ubicación/búsqueda por texto.')
         return
       }
       if (!payload.contact_phone) {
@@ -460,7 +694,7 @@ function App() {
         }
       />
 
-      <Route element={<DisposicionPublica user={user} isAdmin={isAdmin} busy={busy} onLogout={doLogout} year={year} />}>
+      <Route element={<DisposicionPublica user={user} isAdmin={isAdmin} canModerateReports={canModerateReports} busy={busy} onLogout={doLogout} year={year} />}>
         <Route
           path="/"
           element={
@@ -491,6 +725,7 @@ function App() {
         <Route path="/adopciones" element={<PaginaAdopciones user={user} />} />
         <Route path="/adopciones/publicar" element={<PaginaPublicarAdopcion user={user} />} />
         <Route path="/adopciones/:adoptionId" element={<PaginaAdopcionDetalle user={user} />} />
+        <Route path="/veterinarias/:veterinariaId" element={<PaginaVeterinariaDetalle />} />
 
         <Route
           path="/reportar"
@@ -501,6 +736,8 @@ function App() {
               success={success}
               busy={busy}
               reportForm={reportForm}
+              ubicacionTexto={ubicacionTexto}
+              buscandoUbicacion={buscandoUbicacion}
               reports={reports}
               reportCenter={reportCenter}
               reportZoom={reportZoom}
@@ -508,6 +745,9 @@ function App() {
               userLocation={userLocation}
               onSubmitReport={submitReport}
               onReportFormChange={updateReportForm}
+              onUbicacionTextoChange={setUbicacionTexto}
+              onBuscarUbicacionTexto={buscarUbicacionPorTexto}
+              onUsarUbicacionDispositivo={usarUbicacionDispositivoParaReporte}
               onSelectRegion={onSelectRegion}
               onImageChange={onImageChange}
               onClearSuccess={() => setSuccess('')}
@@ -515,7 +755,7 @@ function App() {
           }
         />
 
-        <Route path="/perfil" element={<PaginaPerfil user={user} reports={reports} onLogout={doLogout} busy={busy} onMarkFound={markReportAsFound} onViewDetail={handleViewDetail} />} />
+        <Route path="/perfil" element={<PaginaPerfil user={user} authInicializando={authInicializando} reports={reports} onLogout={doLogout} busy={busy} onMarkFound={markReportAsFound} onViewDetail={handleViewDetail} />} />
         <Route path="/preguntas-frecuentes" element={<PaginaPreguntasFrecuentes user={user} isAdmin={isAdmin} />} />
         
         {/* 2. RUTA REAL DE VOLUNTARIOS CONECTADA AL COMPONENTE */}
