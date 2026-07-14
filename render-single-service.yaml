@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: salvos-salvos-all-in-one
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash scripts/start_render_single_service.sh
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: SESSION_COOKIE_SECURE
+        value: "True"
+      - key: CSRF_COOKIE_SECURE
+        value: "True"
+      - key: REFRESH_COOKIE_SECURE
+        value: "True"
+      - key: REFRESH_COOKIE_SAMESITE
+        value: None
