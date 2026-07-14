@@ -32,7 +32,13 @@ def _crear_token_acceso(secreto: str, sub: int, username: str = 'usuario', es_ad
     return f'{h}.{p}.{f}'
 
 
-@override_settings(JWT_SECRET='secreto-pruebas')
+@override_settings(
+    JWT_SECRET='secreto-pruebas',
+    SUPABASE_URL='',
+    SUPABASE_SERVICE_ROLE_KEY='',
+    SUPABASE_STORAGE_BUCKET='',
+    SUPABASE_STORAGE_PUBLIC=False,
+)
 class GestionArchivosTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -135,3 +141,28 @@ class GestionArchivosTests(TestCase):
                 )
                 self.assertEqual(resp.status_code, 400)
                 self.assertEqual(resp.json().get('detail'), 'maximo_archivos_por_entidad_alcanzado')
+
+    def test_subida_pdf_base64(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            with override_settings(RUTA_BASE_ARCHIVOS=carpeta, MAXIMO_ARCHIVOS_POR_ENTIDAD=5, LIMITE_TAMANO_ARCHIVO_BYTES=1024 * 1024):
+                contenido = b'%PDF-1.4 documento-prueba'
+                base64_data = base64.b64encode(contenido).decode('ascii')
+                resp = self.client.post(
+                    '/api/archivos/',
+                    data=json.dumps(
+                        {
+                            'tipo_entidad': 'veterinaria_verificacion',
+                            'id_entidad': 15,
+                            'categoria': 'titulo_profesional',
+                            'orden': 1,
+                            'servicio_origen': 'ms_seguridad',
+                            'nombre_original': 'titulo.pdf',
+                            'contenido_base64': f'data:application/pdf;base64,{base64_data}',
+                        }
+                    ),
+                    content_type='application/json',
+                    HTTP_AUTHORIZATION=f'Bearer {self.token}',
+                )
+                self.assertEqual(resp.status_code, 201)
+                self.assertEqual(resp.json()['tipo_mime'], 'application/pdf')
+                self.assertEqual(resp.json()['extension'], '.pdf')

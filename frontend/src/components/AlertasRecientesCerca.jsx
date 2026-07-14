@@ -69,6 +69,7 @@ export default function AlertasRecientesCerca({ title, reports, onCardClick }) {
   }, [reports, filterKey])
 
   const visible = useMemo(() => filtered.slice(0, 12), [filtered])
+  const visibleCountClass = `count-${Math.min(Math.max(visible.length, 0), 4)}`
 
   return (
     <div className="nearbyAlerts">
@@ -90,7 +91,7 @@ export default function AlertasRecientesCerca({ title, reports, onCardClick }) {
         </div>
       </div>
 
-      <div className="nearbyAlertsGrid">
+      <div className={`nearbyAlertsGrid ${visibleCountClass}`}>
         {visible.length === 0 ? (
           <div className="nearbyAlertsEmpty">Sin alertas recientes</div>
         ) : (
@@ -99,6 +100,7 @@ export default function AlertasRecientesCerca({ title, reports, onCardClick }) {
             const location = `${r?.comuna || ''}${r?.region ? `, ${r.region}` : ''}`.trim()
             const timeLabel = toTimeLabel(r?.created_at)
             const name = (r?.pet_name || '').trim() || 'Mascota sin nombre'
+            const imgUrl = r?.image_data_url || r?.imagenes?.[0]?.url_descarga || ''
 
             return (
               <button
@@ -108,8 +110,8 @@ export default function AlertasRecientesCerca({ title, reports, onCardClick }) {
                 onClick={() => onCardClick?.(r.id)}
               >
                 <div className="nearbyAlertImgWrap">
-                  {r?.image_data_url ? (
-                    <img className="nearbyAlertImg" src={r.image_data_url} alt={name} />
+                  {imgUrl ? (
+                    <img className="nearbyAlertImg" src={imgUrl} alt={name} />
                   ) : (
                     <div className="nearbyAlertImgPlaceholder" aria-hidden="true">
                       <div className="nearbyAlertImgEmoji">{getSpeciesEmoji(r?.species)}</div>

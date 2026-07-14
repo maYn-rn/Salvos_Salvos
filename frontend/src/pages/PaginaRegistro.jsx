@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { getComunasForRegion, optimizeImageFileToDataUrl, REGION_VIEW } from '../shared/appCore';
+import {
+  fileToDataUrl,
+  formatFileSize,
+  getComunasForRegion,
+  getVeterinaryDocumentTypeLabel,
+  MAX_DOCUMENT_OUTPUT_BYTES,
+  MAX_IMAGE_UPLOAD_BYTES,
+  optimizeImageFileToDataUrl,
+  REGION_VIEW,
+  VETERINARY_VERIFICATION_DOCUMENT_OPTIONS,
+} from '../shared/appCore';
 
 // Función de ayuda para formatear el RUT chileno (agrega puntos y guion)
 const formatearRUT = (valor) => {
@@ -53,7 +63,10 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
   const [ubicacionBusy, setUbicacionBusy] = useState(false);
   const [ubicacionInfo, setUbicacionInfo] = useState('');
   const [documentoBusy, setDocumentoBusy] = useState(false);
+  const [mostrarContrasena, setMostrarContrasena] = useState(false);
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
   const esVeterinaria = (authForm.account_type || 'usuario') === 'veterinaria';
+  const documentosLocales = authForm.documentos_verificacion_locales || [];
 
   const handleLocalSubmit = (e) => {
     e.preventDefault();
@@ -73,6 +86,10 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
     if (esVeterinaria) {
       if (!authForm.nombre_veterinaria || !authForm.telefono_veterinaria || !authForm.region || !authForm.comuna || !authForm.direccion_veterinaria) {
         setLocalError('Completa los datos principales de la veterinaria.');
+        return;
+      }
+      if (!documentosLocales.length) {
+        setLocalError('Adjunta al menos un documento de verificación.');
         return;
       }
       if (authForm.latitude == null || authForm.longitude == null) {
@@ -104,7 +121,7 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
             direccion_veterinaria: '',
             descripcion_veterinaria: '',
             sitio_web_veterinaria: '',
-            documento_verificacion_local: null,
+            documentos_verificacion_locales: [],
             latitude: null,
             longitude: null,
           }
@@ -173,46 +190,72 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
   }, [esVeterinaria, authForm.direccion_veterinaria, authForm.comuna, authForm.region]);
 
   const handleDocumentoVerificacion = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) {
-      onAuthFormChange({ documento_verificacion_local: null });
-      return;
-    }
-
-    if (!file.type.startsWith('image/')) {
-      setLocalError('El documento debe subirse como imagen escaneada o foto.');
-      e.target.value = '';
-      return;
-    }
-
-    if (file.size > 10_000_000) {
-      setLocalError('El documento es muy grande. Usa una imagen de máximo 10MB.');
-      e.target.value = '';
+    const archivos = Array.from(e.target.files || []);
+    if (!archivos.length) {
+      onAuthFormChange({ documentos_verificacion_locales: [] });
       return;
     }
 
     setDocumentoBusy(true);
     setLocalError('');
     try {
-      const dataUrl = await optimizeImageFileToDataUrl(file, { maxEdge: 1800, maxBytes: 900_000, mimePreference: 'image/jpeg' });
-      if (!dataUrl) {
-        setLocalError('No se pudo procesar el documento de verificación.');
-        e.target.value = '';
-        return;
-      }
-      onAuthFormChange({
-        documento_verificacion_local: {
+      const nuevosDocumentos = [];
+      for (const file of archivos) {
+        const esImagen = file.type.startsWith('image/');
+        const esPdf = file.type === 'application/pdf';
+        if (!esImagen && !esPdf) {
+          setLocalError('Solo se admiten imágenes o archivos PDF para la verificación.');
+          e.target.value = '';
+          return;
+        }
+
+        if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+          setLocalError(`El documento "${file.name}" es muy grande. Usa un archivo de máximo ${formatFileSize(MAX_IMAGE_UPLOAD_BYTES)}.`);
+          e.target.value = '';
+          return;
+        }
+
+        const dataUrl = esImagen
+          ? await optimizeImageFileToDataUrl(file, { maxEdge: 1800, maxBytes: MAX_DOCUMENT_OUTPUT_BYTES, mimePreference: 'image/jpeg' })
+          : await fileToDataUrl(file);
+        if (!dataUrl) {
+          setLocalError(`No se pudo procesar el documento "${file.name}".`);
+          e.target.value = '';
+          return;
+        }
+
+        nuevosDocumentos.push({
           nombre_original: file.name,
           contenido_base64: dataUrl,
-          vista_previa: dataUrl,
-        },
+          vista_previa: esImagen ? dataUrl : '',
+          tipo_documento: VETERINARY_VERIFICATION_DOCUMENT_OPTIONS[0].value,
+          tipo_mime: file.type,
+        });
+      }
+
+      onAuthFormChange({
+        documentos_verificacion_locales: [...documentosLocales, ...nuevosDocumentos].slice(0, 6),
       });
+      e.target.value = '';
     } catch {
       setLocalError('No se pudo procesar el documento de verificación.');
       e.target.value = '';
     } finally {
       setDocumentoBusy(false);
     }
+  };
+
+  const actualizarTipoDocumento = (index, tipo_documento) => {
+    const next = documentosLocales.map((documento, idx) => (
+      idx === index ? { ...documento, tipo_documento } : documento
+    ));
+    onAuthFormChange({ documentos_verificacion_locales: next });
+  };
+
+  const eliminarDocumento = (index) => {
+    onAuthFormChange({
+      documentos_verificacion_locales: documentosLocales.filter((_, idx) => idx !== index),
+    });
   };
 
   return (
@@ -240,7 +283,7 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
                   <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </span>
-              <input value={authForm.first_name || ''} onChange={(e) => onAuthFormChange({ first_name: e.target.value })} autoComplete="given-name" placeholder="Ej: Matias" required />
+              <input value={authForm.first_name || ''} onChange={(e) => onAuthFormChange({ first_name: e.target.value })} autoComplete="given-name" placeholder="Ingresa tu nombre" required />
             </div>
           </label>
 
@@ -253,7 +296,7 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
                   <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </span>
-              <input value={authForm.last_name || ''} onChange={(e) => onAuthFormChange({ last_name: e.target.value })} autoComplete="family-name" placeholder="Ej: Gonzalez" required />
+              <input value={authForm.last_name || ''} onChange={(e) => onAuthFormChange({ last_name: e.target.value })} autoComplete="family-name" placeholder="Ingresa tu apellido" required />
             </div>
           </label>
 
@@ -266,7 +309,7 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
                   <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </span>
-              <input value={authForm.username || ''} onChange={(e) => onAuthFormChange({ username: e.target.value })} autoComplete="username" placeholder="Ej: matias123" required />
+              <input value={authForm.username || ''} onChange={(e) => onAuthFormChange({ username: e.target.value })} autoComplete="username" placeholder="Elige un nombre de usuario" required />
             </div>
           </label>
 
@@ -281,7 +324,7 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
                   <path d="M8 16h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </span>
-              <input value={authForm.rut || ''} onChange={handleRutChange} placeholder="Ej: 12.345.678-9" maxLength={12} required />
+              <input value={authForm.rut || ''} onChange={handleRutChange} placeholder="Ingresa tu RUT" maxLength={12} required />
             </div>
           </label>
 
@@ -294,7 +337,7 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
                   <path d="m6 8 6 5 6-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </span>
-              <input type="email" value={authForm.email || ''} onChange={(e) => onAuthFormChange({ email: e.target.value })} autoComplete="email" placeholder="Ej: correo@ejemplo.com" required />
+              <input type="email" value={authForm.email || ''} onChange={(e) => onAuthFormChange({ email: e.target.value })} autoComplete="email" placeholder="nombre@dominio.cl" required />
             </div>
           </label>
 
@@ -310,12 +353,12 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
             <>
               <label className="field">
                 <span>Nombre de la veterinaria</span>
-                <input value={authForm.nombre_veterinaria || ''} onChange={(e) => onAuthFormChange({ nombre_veterinaria: e.target.value })} placeholder="Ej: Veterinaria Sanos y Salvos" required />
+                <input value={authForm.nombre_veterinaria || ''} onChange={(e) => onAuthFormChange({ nombre_veterinaria: e.target.value })} placeholder="Nombre comercial de la veterinaria" required />
               </label>
 
               <label className="field">
                 <span>Teléfono de la veterinaria</span>
-                <input value={authForm.telefono_veterinaria || ''} onChange={(e) => onAuthFormChange({ telefono_veterinaria: e.target.value })} placeholder="Ej: +56 9 1234 5678" required />
+                <input value={authForm.telefono_veterinaria || ''} onChange={(e) => onAuthFormChange({ telefono_veterinaria: e.target.value })} placeholder="+56 9 1234 5678" required />
               </label>
 
               <label className="field">
@@ -336,35 +379,57 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
 
               <label className="field registerFormFull">
                 <span>Dirección o referencia</span>
-                <input value={authForm.direccion_veterinaria || ''} onChange={(e) => onAuthFormChange({ direccion_veterinaria: e.target.value })} placeholder="Ej: Alameda 1234, frente a la plaza" required />
+                <input value={authForm.direccion_veterinaria || ''} onChange={(e) => onAuthFormChange({ direccion_veterinaria: e.target.value })} placeholder="Dirección completa y referencia" required />
               </label>
 
               <label className="field">
                 <span>Sitio web</span>
-                <input value={authForm.sitio_web_veterinaria || ''} onChange={(e) => onAuthFormChange({ sitio_web_veterinaria: e.target.value })} placeholder="Ej: www.veterinaria.cl" />
+                <input value={authForm.sitio_web_veterinaria || ''} onChange={(e) => onAuthFormChange({ sitio_web_veterinaria: e.target.value })} placeholder="https://www.tuveterinaria.cl" />
               </label>
 
               <label className="field registerFormFull">
                 <span>Descripción</span>
-                <textarea value={authForm.descripcion_veterinaria || ''} onChange={(e) => onAuthFormChange({ descripcion_veterinaria: e.target.value })} rows={4} placeholder="Servicios, horarios o especialidades..." />
+                <textarea value={authForm.descripcion_veterinaria || ''} onChange={(e) => onAuthFormChange({ descripcion_veterinaria: e.target.value })} rows={4} placeholder="Describe servicios, horarios y especialidades" />
               </label>
 
               <label className="field registerFormFull">
-                <span>Documento de verificación</span>
-                <input type="file" accept="image/*" onChange={handleDocumentoVerificacion} required />
-                <div className="mutedText">Sube una imagen o escaneo del documento que acredite la veterinaria.</div>
+                <span>Documentos de verificación</span>
+                <input type="file" accept="image/*,application/pdf" onChange={handleDocumentoVerificacion} multiple required={!documentosLocales.length} />
+                <div className="mutedText">Puedes subir varios respaldos, por ejemplo patente comercial, RUT empresa, inicio de actividades, certificado sanitario o título profesional.</div>
               </label>
 
-              {authForm.documento_verificacion_local?.vista_previa ? (
-                <div className="registerFormFull" style={{ border: '1px solid rgba(6, 74, 85, 0.12)', borderRadius: '14px', padding: '12px' }}>
-                  <div className="mutedText" style={{ marginBottom: '8px' }}>
-                    {documentoBusy ? 'Procesando documento...' : `Documento listo: ${authForm.documento_verificacion_local.nombre_original}`}
-                  </div>
-                  <img
-                    src={authForm.documento_verificacion_local.vista_previa}
-                    alt="Documento de verificación"
-                    style={{ width: '100%', maxHeight: '260px', objectFit: 'contain', borderRadius: '10px', background: '#f8f9fa' }}
-                  />
+              {documentosLocales.length ? (
+                <div className="registerFormFull" style={{ display: 'grid', gap: '12px' }}>
+                  {documentosLocales.map((documento, index) => (
+                    <div key={`${documento.nombre_original || 'documento'}-${index}`} style={{ border: '1px solid rgba(6, 74, 85, 0.12)', borderRadius: '14px', padding: '12px', display: 'grid', gap: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <strong>{documento.nombre_original}</strong>
+                        <button type="button" className="miniBtn danger" onClick={() => eliminarDocumento(index)}>Quitar</button>
+                      </div>
+                      <label className="field" style={{ marginBottom: 0 }}>
+                        <span>Tipo de documento</span>
+                        <select value={documento.tipo_documento || 'otro'} onChange={(e) => actualizarTipoDocumento(index, e.target.value)}>
+                          {VETERINARY_VERIFICATION_DOCUMENT_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="mutedText">
+                        {documentoBusy ? 'Procesando documento...' : `Documento cargado como ${getVeterinaryDocumentTypeLabel(documento.tipo_documento)}`}
+                      </div>
+                      {documento.vista_previa ? (
+                        <img
+                          src={documento.vista_previa}
+                          alt={documento.nombre_original || 'Documento de verificación'}
+                          style={{ width: '100%', maxHeight: '260px', objectFit: 'contain', borderRadius: '10px', background: '#f8f9fa' }}
+                        />
+                      ) : (
+                        <div style={{ padding: '14px', borderRadius: '10px', background: '#f8f9fa', color: '#475569', fontWeight: 700 }}>
+                          PDF listo para revisión
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               ) : null}
 
@@ -381,7 +446,15 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
                   <path d="M6 11h12a2 2 0 0 1 2 2v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-6a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
                 </svg>
               </span>
-              <input type="password" value={authForm.password || ''} onChange={(e) => onAuthFormChange({ password: e.target.value })} autoComplete="new-password" placeholder="Ej: MiClave123" required />
+              <input type={mostrarContrasena ? "text" : "password"} value={authForm.password || ''} onChange={(e) => onAuthFormChange({ password: e.target.value })} autoComplete="new-password" placeholder="Crea una contraseña segura" required />
+              <button
+                className="fieldToggleBtn"
+                type="button"
+                onClick={() => setMostrarContrasena((valor) => !valor)}
+                aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {mostrarContrasena ? 'Ocultar' : 'Mostrar'}
+              </button>
             </div>
           </label>
 
@@ -395,7 +468,15 @@ export default function PaginaRegistro({ error, busy, authForm, onAuthFormChange
                   <path d="m9.2 16.1 1.8 1.8 3.8-3.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </span>
-              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" placeholder="Repite tu contraseña" required />
+              <input type={mostrarConfirmacion ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" placeholder="Confirma tu contraseña" required />
+              <button
+                className="fieldToggleBtn"
+                type="button"
+                onClick={() => setMostrarConfirmacion((valor) => !valor)}
+                aria-label={mostrarConfirmacion ? 'Ocultar confirmación de contraseña' : 'Mostrar confirmación de contraseña'}
+              >
+                {mostrarConfirmacion ? 'Ocultar' : 'Mostrar'}
+              </button>
             </div>
           </label>
 

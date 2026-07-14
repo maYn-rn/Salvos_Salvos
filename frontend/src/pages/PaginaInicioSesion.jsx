@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 export default function PaginaInicioSesion({ error, busy, authForm, onAuthFormChange, onSubmitAuth, locationSearch, onSwitchToRegister }) {
   // Estado local para manejar si el usuario quiere ser recordado
   const [recordarme, setRecordarme] = useState(false);
+  const [mostrarContrasena, setMostrarContrasena] = useState(false);
 
   const handleSubmitLocal = (e) => {
     e.preventDefault();
@@ -38,7 +39,7 @@ export default function PaginaInicioSesion({ error, busy, authForm, onAuthFormCh
                 value={authForm.username || ''} 
                 onChange={(e) => onAuthFormChange({ username: e.target.value })} 
                 autoComplete="username" 
-                placeholder="Ej: matias123"
+                placeholder="Ingresa tu nombre de usuario"
                 required 
               />
             </div>
@@ -54,13 +55,21 @@ export default function PaginaInicioSesion({ error, busy, authForm, onAuthFormCh
                 </svg>
               </span>
               <input 
-                type="password" 
+                type={mostrarContrasena ? "text" : "password"}
                 value={authForm.password || ''} 
                 onChange={(e) => onAuthFormChange({ password: e.target.value })} 
                 autoComplete="current-password" 
-                placeholder="Ingresa tu contraseña"
+                placeholder="Ingresa tu contraseña segura"
                 required 
               />
+              <button
+                className="fieldToggleBtn"
+                type="button"
+                onClick={() => setMostrarContrasena((valor) => !valor)}
+                aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {mostrarContrasena ? 'Ocultar' : 'Mostrar'}
+              </button>
             </div>
           </label>
 

@@ -146,7 +146,7 @@ USE_X_FORWARDED_HOST = True
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'dev-jwt-secret-change-me')
 RUTA_BASE_ARCHIVOS = BASE_DIR / 'archivos_subidos'
-LIMITE_TAMANO_ARCHIVO_BYTES = int(os.environ.get('LIMITE_TAMANO_ARCHIVO_BYTES', '5242880'))
+LIMITE_TAMANO_ARCHIVO_BYTES = int(os.environ.get('LIMITE_TAMANO_ARCHIVO_BYTES', '1048576'))
 MAXIMO_ARCHIVOS_POR_ENTIDAD = int(os.environ.get('MAXIMO_ARCHIVOS_POR_ENTIDAD', '3'))
 
 SUPABASE_URL = (os.environ.get('SUPABASE_URL') or '').strip()

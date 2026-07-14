@@ -1,15 +1,24 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CircleMarker, MapContainer, Popup, TileLayer, ZoomControl } from 'react-leaflet'
 
 import { InvalidarTamanoMapa, RecentrarMapa } from '../components/map/AyudantesMapa'
 import { apiRequest, REGION_VIEW } from '../shared/appCore'
 
 export default function PaginaVeterinariaDetalle() {
+  const navigate = useNavigate()
   const { veterinariaId } = useParams()
   const [veterinaria, setVeterinaria] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  function handleBack() {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    navigate('/mapa')
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -43,7 +52,7 @@ export default function PaginaVeterinariaDetalle() {
 
   return (
     <div className="mainInner">
-      <button className="miniBtn" type="button" onClick={() => window.history.back()} style={{ marginBottom: '18px' }}>
+      <button className="miniBtn" type="button" onClick={handleBack} style={{ marginBottom: '18px' }}>
         ← Volver
       </button>
 

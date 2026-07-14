@@ -1,12 +1,17 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 
-export default function DisposicionPublica({ user, isAdmin, canModerateReports, busy, onLogout, year }) {
+export default function DisposicionPublica({ user, isAdmin, canModerateReports, busy, onLogout, year, onGoHome }) {
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const publishRef = useRef(null)
   const adoptionNext = encodeURIComponent('/adopciones/publicar')
+
+  function handleGoHome() {
+    if (typeof onGoHome === 'function') onGoHome()
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'auto' })
+  }
 
   // Cierra el menú automáticamente si cambias de página
   useEffect(() => {
@@ -34,7 +39,7 @@ export default function DisposicionPublica({ user, isAdmin, canModerateReports, 
     <div className="appShell">
       <header className="siteHeader">
         <div className="headerInner">
-          <Link className="brand" to="/">
+          <Link className="brand" to="/" onClick={handleGoHome}>
             <img className="brandLogo" src="/logo_nuevo_sys.png" alt="Sanos y Salvos" />
             <span className="brandName">Sanos y Salvos</span>
           </Link>
@@ -54,7 +59,7 @@ export default function DisposicionPublica({ user, isAdmin, canModerateReports, 
           {/* CONTENEDOR MAESTRO: En PC es horizontal, en Móvil es un panel flotante */}
           <div className={`navAndActions ${menuOpen ? 'open' : ''}`}>
             <nav id="site-navigation" className="siteNav" aria-label="Navegación principal">
-              <Link className="navLink" to="/">Inicio</Link>
+              <Link className="navLink" to="/" onClick={handleGoHome}>Inicio</Link>
               <Link className="navLink" to="/mapa">Mapa</Link>
               <Link className="navLink" to="/adopciones">Adopciones</Link>
               <Link className="navLink" to="/voluntarios">Voluntarios</Link>
@@ -140,7 +145,7 @@ export default function DisposicionPublica({ user, isAdmin, canModerateReports, 
             <div className="footerCol">
               <div className="footerTitle">Navegación</div>
               <div className="footerLinks">
-                <Link className="footerLink" to="/">Inicio</Link>
+                <Link className="footerLink" to="/" onClick={handleGoHome}>Inicio</Link>
                 <Link className="footerLink" to="/adopciones">Adopciones</Link>
                 <Link className="footerLink" to="/voluntarios">Voluntarios</Link>
                 <Link className="footerLink" to="/preguntas-frecuentes">Preguntas frecuentes</Link>
@@ -151,7 +156,7 @@ export default function DisposicionPublica({ user, isAdmin, canModerateReports, 
             <div className="footerCol">
               <div className="footerTitle">Empresa</div>
               <div className="footerLinks">
-                <Link className="footerLink" to="/#sobre-nosotros">Nosotros</Link>
+                <Link className="footerLink" to="/#sobre-nosotros" onClick={handleGoHome}>Nosotros</Link>
                 <Link className="footerLink" to="/politicas-de-privacidad">Políticas de privacidad</Link>
                 <Link className="footerLink" to="/terminos-y-condiciones">Términos y condiciones</Link>
               </div>

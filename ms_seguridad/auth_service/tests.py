@@ -7,7 +7,7 @@ import time
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 
-from .models import RefreshToken, VeterinariaProfile
+from .models import RefreshToken, VeterinariaProfile, VeterinariaVerificationDocument
 
 
 def _b64url(texto: bytes) -> str:
@@ -163,6 +163,50 @@ class PruebasFlujosAutenticacion(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn('results', resp.json())
 
+        resp_crear_admin = self.client.post(
+            '/api/auth/users/',
+            data=json.dumps(
+                {
+                    'username': 'nuevo-admin',
+                    'password': 'Clave12345',
+                    'email': 'nuevo-admin@ejemplo.com',
+                    'first_name': 'Nuevo',
+                    'last_name': 'Admin',
+                }
+            ),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {token_admin}',
+        )
+        self.assertEqual(resp_crear_admin.status_code, 201)
+        self.assertTrue(resp_crear_admin.json()['is_staff'])
+        self.assertTrue(resp_crear_admin.json()['is_superuser'])
+
+        objetivo = User.objects.create_user(
+            username='moderable',
+            password='Clave12345',
+            email='moderable@ejemplo.com',
+            first_name='Mo',
+            last_name='Derable',
+        )
+        resp_promover = self.client.patch(
+            f'/api/auth/users/{objetivo.id}/',
+            data=json.dumps({'is_staff': True}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {token_admin}',
+        )
+        self.assertEqual(resp_promover.status_code, 200)
+        objetivo.refresh_from_db()
+        self.assertTrue(objetivo.is_staff)
+        self.assertTrue(objetivo.is_superuser)
+
+        resp_auto_demote = self.client.patch(
+            f'/api/auth/users/{admin.id}/',
+            data=json.dumps({'is_staff': False}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {token_admin}',
+        )
+        self.assertEqual(resp_auto_demote.status_code, 400)
+
     def test_registro_veterinaria_y_endpoints_publicos(self):
         resp = self.client.post(
             '/api/auth/register/',
@@ -220,9 +264,20 @@ class PruebasFlujosAutenticacion(TestCase):
             f'/api/auth/veterinarias/{perfil.id}/',
             data=json.dumps(
                 {
-                    'documento_verificacion_archivo_id': 55,
-                    'documento_verificacion_url': 'http://localhost:8000/api/archivos/55/descargar/',
-                    'documento_verificacion_nombre': 'patente-vet.jpg',
+                    'documentos_verificacion': [
+                        {
+                            'tipo_documento': 'patente_comercial',
+                            'archivo_id': 55,
+                            'archivo_url': 'http://localhost:8000/api/archivos/55/descargar/',
+                            'archivo_nombre': 'patente-vet.jpg',
+                        },
+                        {
+                            'tipo_documento': 'titulo_profesional',
+                            'archivo_id': 56,
+                            'archivo_url': 'http://localhost:8000/api/archivos/56/descargar/',
+                            'archivo_nombre': 'titulo-vet.pdf',
+                        },
+                    ],
                 }
             ),
             content_type='application/json',
@@ -230,6 +285,8 @@ class PruebasFlujosAutenticacion(TestCase):
         )
         self.assertEqual(resp_subida_doc.status_code, 200)
         self.assertEqual(resp_subida_doc.json()['estado_verificacion'], 'pendiente')
+        self.assertEqual(len(resp_subida_doc.json()['documentos_verificacion']), 2)
+        self.assertEqual(VeterinariaVerificationDocument.objects.filter(veterinaria=perfil).count(), 2)
 
         admin = get_user_model().objects.create_user(
             username='admin-vet',
@@ -258,3 +315,108 @@ class PruebasFlujosAutenticacion(TestCase):
         resp_detalle = self.client.get(f"/api/auth/veterinarias/{lista[0]['id']}/")
         self.assertEqual(resp_detalle.status_code, 200)
         self.assertEqual(resp_detalle.json()['owner_name'], 'Ana Perez')
+
+    def test_admin_promovido_con_token_antiguo_puede_moderar_veterinaria(self):
+        User = get_user_model()
+        vet_user = User.objects.create_user(
+            username='vet-mod',
+            password='Clave12345',
+            email='vetmod@ejemplo.com',
+            first_name='Vete',
+            last_name='Mod',
+        )
+        perfil = VeterinariaProfile.objects.create(
+            user=vet_user,
+            nombre_veterinaria='Veterinaria Token',
+            telefono='+56911111111',
+            region='Región Metropolitana de Santiago',
+            comuna='Santiago',
+            direccion='Siempre Viva 123',
+            descripcion='Prueba',
+            sitio_web='https://vet-token.cl',
+            latitude=-33.4489,
+            longitude=-70.6693,
+            activo=False,
+            puede_confirmar_reportes=False,
+            estado_verificacion=VeterinariaProfile.ESTADO_PENDIENTE,
+        )
+        perfil.documentos_verificacion.create(
+            tipo_documento='patente_comercial',
+            archivo_id=77,
+            archivo_url='http://localhost:8000/api/archivos/77/descargar/',
+            archivo_nombre='patente.pdf',
+            orden=1,
+        )
+
+        admin = User.objects.create_user(
+            username='moderador-token',
+            password='Clave12345',
+            email='moderador@ejemplo.com',
+            first_name='Modo',
+            last_name='Admin',
+        )
+        token_sin_admin = _crear_token_acceso('secreto-pruebas', admin.id, username='moderador-token', es_admin=False)
+        admin.is_staff = True
+        admin.is_superuser = True
+        admin.save(update_fields=['is_staff', 'is_superuser'])
+
+        resp_aprobar = self.client.patch(
+            f'/api/auth/veterinarias/{perfil.id}/',
+            data=json.dumps({'estado_verificacion': 'aprobada'}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {token_sin_admin}',
+        )
+        self.assertEqual(resp_aprobar.status_code, 200)
+        perfil.refresh_from_db()
+        self.assertEqual(perfil.estado_verificacion, VeterinariaProfile.ESTADO_APROBADA)
+        self.assertTrue(perfil.activo)
+
+    def test_patch_veterinaria_no_exige_csrf(self):
+        client = Client(enforce_csrf_checks=True)
+        User = get_user_model()
+        vet_user = User.objects.create_user(
+            username='vet-csrf',
+            password='Clave12345',
+            email='vetcsrf@ejemplo.com',
+            first_name='Vet',
+            last_name='Csrf',
+        )
+        perfil = VeterinariaProfile.objects.create(
+            user=vet_user,
+            nombre_veterinaria='Veterinaria CSRF',
+            telefono='+56922222222',
+            region='Región Metropolitana de Santiago',
+            comuna='Santiago',
+            direccion='Avenida CSRF 123',
+            descripcion='Prueba csrf',
+            sitio_web='https://vet-csrf.cl',
+            latitude=-33.4489,
+            longitude=-70.6693,
+            activo=False,
+            puede_confirmar_reportes=False,
+            estado_verificacion=VeterinariaProfile.ESTADO_PENDIENTE,
+        )
+        perfil.documentos_verificacion.create(
+            tipo_documento='patente_comercial',
+            archivo_id=88,
+            archivo_url='http://localhost:8000/api/archivos/88/descargar/',
+            archivo_nombre='patente-csrf.pdf',
+            orden=1,
+        )
+
+        admin = User.objects.create_user(
+            username='admin-csrf',
+            password='Clave12345',
+            email='admincsrf@ejemplo.com',
+            first_name='Admin',
+            last_name='Csrf',
+            is_staff=True,
+        )
+        token_admin = _crear_token_acceso('secreto-pruebas', admin.id, username='admin-csrf', es_admin=True)
+        resp = client.patch(
+            f'/api/auth/veterinarias/{perfil.id}/',
+            data=json.dumps({'estado_verificacion': 'rechazada', 'comentario_revision': 'csrf ok'}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {token_admin}',
+        )
+        self.assertEqual(resp.status_code, 200)

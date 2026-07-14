@@ -94,7 +94,7 @@ export default function PaginaReporte({
                   <input
                     value={ubicacionTexto || ''}
                     onChange={(e) => onUbicacionTextoChange(e.target.value)}
-                    placeholder="Ej: Av. Providencia 1234 (se busca automáticamente)"
+                    placeholder="Ingresa una dirección o referencia para ubicar el reporte"
                   />
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
                     <button
@@ -145,15 +145,15 @@ export default function PaginaReporte({
                 </label>
                 <label className="field">
                   <span>Descripción</span>
-                  <input value={reportForm.description} onChange={(e) => onReportFormChange({ description: e.target.value })} placeholder="Se perdió cerca de…" />
+                  <input value={reportForm.description} onChange={(e) => onReportFormChange({ description: e.target.value })} placeholder="Describe dónde fue vista y cualquier detalle relevante" />
                 </label>
                 <label className="field">
                   <span>Contacto (teléfono) *</span>
-                  <input type="tel" value={reportForm.contact_phone} onChange={(e) => onReportFormChange({ contact_phone: e.target.value })} placeholder="+56912345678" maxLength={15} />
+                  <input type="tel" value={reportForm.contact_phone} onChange={(e) => onReportFormChange({ contact_phone: e.target.value })} placeholder="+56 9 1234 5678" maxLength={15} />
                 </label>
                 <label className="field">
                   <span>Contacto (email) *</span>
-                  <input type="email" value={reportForm.contact_email} onChange={(e) => onReportFormChange({ contact_email: e.target.value })} placeholder="correo@ejemplo.com" />
+                  <input type="email" value={reportForm.contact_email} onChange={(e) => onReportFormChange({ contact_email: e.target.value })} placeholder="nombre@dominio.cl" />
                 </label>
 
                 <div className="mutedText">

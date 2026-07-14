@@ -6,11 +6,25 @@ import PaginaAdminReportes from './PaginaAdminReportes'
 import PaginaAdminUsuarios from './PaginaAdminUsuarios'
 import PaginaAdminAdopciones from './PaginaAdminAdopciones' // ◄ Importamos la nueva página
 
-export default function PanelAdministracion({ user, onLogout, busy }) {
-  const isAdmin = Boolean(user?.is_staff || user?.is_superuser)
-  const canModerateReports = Boolean(isAdmin || user?.can_confirm_reports)
+export default function PanelAdministracion({ user, onLogout, busy, authInicializando }) {
   const location = useLocation()
   const [search, setSearch] = useState('')
+  const isAdmin = Boolean(user?.is_staff || user?.is_superuser)
+  const canModerateReports = Boolean(isAdmin || user?.can_confirm_reports)
+
+  if (!user) {
+    if (authInicializando) {
+      return (
+        <div className="mainInner">
+          <section className="card">
+            <h2 className="cardTitle">Backoffice</h2>
+            <div className="mutedText">Cargando sesión…</div>
+          </section>
+        </div>
+      )
+    }
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />
+  }
 
   if (!canModerateReports) {
     return (
@@ -29,7 +43,7 @@ export default function PanelAdministracion({ user, onLogout, busy }) {
   
   const title =
     path.startsWith('/admin/reportes') ? 'Reportes' :
-    path.startsWith('/admin/usuarios') ? 'Usuarios' :
+    path.startsWith('/admin/usuarios') ? 'Usuarios y veterinarias' :
     path.startsWith('/admin/adopciones') ? 'Adopciones' : // ◄ Título dinámico para adopciones
     'Dashboard'
     
@@ -74,7 +88,7 @@ export default function PanelAdministracion({ user, onLogout, busy }) {
                 <span className="boNavIcon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" role="presentation"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.505 4.505 0 0 0 12 12Zm0 2c-4.42 0-8 2.35-8 5.25V21h16v-1.75c0-2.9-3.58-5.25-8-5.25Z"/></svg>
                 </span>
-                <span>Usuarios</span>
+                <span>Usuarios y veterinarias</span>
               </Link>
             ) : null}
           </nav>
@@ -91,7 +105,7 @@ export default function PanelAdministracion({ user, onLogout, busy }) {
                     d="M10.5 3a7.5 7.5 0 1 1 4.61 13.41l3.24 3.25a1 1 0 0 1-1.41 1.41l-3.25-3.24A7.5 7.5 0 0 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11a5.5 5.5 0 0 0 0-11Z"
                   />
                 </svg>
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar en la sección…" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre, ID, correo o estado" />
               </div>
             </div>
 

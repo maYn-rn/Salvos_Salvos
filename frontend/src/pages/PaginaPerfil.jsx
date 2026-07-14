@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 
-import { apiRequest, formatDateShort, normalizeSpecies, normalizeStatus } from '../shared/appCore'
+import {
+  apiRequest,
+  fileToDataUrl,
+  formatDateShort,
+  formatFileSize,
+  getVeterinaryDocumentTypeLabel,
+  MAX_DOCUMENT_OUTPUT_BYTES,
+  MAX_IMAGE_UPLOAD_BYTES,
+  optimizeImageFileToDataUrl,
+  normalizeSpecies,
+  normalizeStatus,
+  VETERINARY_VERIFICATION_DOCUMENT_OPTIONS,
+} from '../shared/appCore'
 
 export default function PaginaPerfil({ user, authInicializando, reports, onLogout, busy, onMarkFound, onViewDetail }) {
   if (!user) {
@@ -22,10 +34,20 @@ export default function PaginaPerfil({ user, authInicializando, reports, onLogou
   const [profileDesc, setProfileDesc] = useState('Amante de los animales y miembro activo de la comunidad Sanos y Salvos.')
   const [profilePic, setProfilePic] = useState('')
   const [detailsById, setDetailsById] = useState({})
+  const [veterinariaData, setVeterinariaData] = useState(user?.veterinaria || null)
+  const [documentosLocales, setDocumentosLocales] = useState([])
+  const [documentoBusy, setDocumentoBusy] = useState(false)
+  const [veterinariaError, setVeterinariaError] = useState('')
+  const [veterinariaSuccess, setVeterinariaSuccess] = useState('')
 
   const myReports = useMemo(() => {
     return (reports || []).filter((r) => r.contact_email === user.email)
   }, [reports, user.email])
+  const documentosVeterinaria = veterinariaData?.documentos_verificacion || []
+
+  useEffect(() => {
+    setVeterinariaData(user?.veterinaria || null)
+  }, [user])
 
   useEffect(() => {
     const key = user?.username ? `profile_${user.username}` : null
@@ -100,6 +122,116 @@ export default function PaginaPerfil({ user, authInicializando, reports, onLogou
     return '🐾'
   }
 
+  async function handleDocumentosVeterinariaChange(e) {
+    const archivos = Array.from(e.target.files || [])
+    if (!archivos.length) {
+      setDocumentosLocales([])
+      return
+    }
+
+    setDocumentoBusy(true)
+    setVeterinariaError('')
+    setVeterinariaSuccess('')
+    try {
+      const nuevosDocumentos = []
+      for (const file of archivos) {
+        const esImagen = file.type.startsWith('image/')
+        const esPdf = file.type === 'application/pdf'
+        if (!esImagen && !esPdf) {
+          setVeterinariaError('Solo se admiten imágenes o archivos PDF para la verificación.')
+          e.target.value = ''
+          return
+        }
+        if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+          setVeterinariaError(`El documento "${file.name}" es muy grande. Usa un archivo de máximo ${formatFileSize(MAX_IMAGE_UPLOAD_BYTES)}.`)
+          e.target.value = ''
+          return
+        }
+        const dataUrl = esImagen
+          ? await optimizeImageFileToDataUrl(file, { maxEdge: 1800, maxBytes: MAX_DOCUMENT_OUTPUT_BYTES, mimePreference: 'image/jpeg' })
+          : await fileToDataUrl(file)
+        if (!dataUrl) {
+          setVeterinariaError(`No se pudo procesar el documento "${file.name}".`)
+          e.target.value = ''
+          return
+        }
+        nuevosDocumentos.push({
+          nombre_original: file.name,
+          contenido_base64: dataUrl,
+          vista_previa: esImagen ? dataUrl : '',
+          tipo_documento: VETERINARY_VERIFICATION_DOCUMENT_OPTIONS[0].value,
+        })
+      }
+      setDocumentosLocales((prev) => [...prev, ...nuevosDocumentos].slice(0, 6))
+      e.target.value = ''
+    } finally {
+      setDocumentoBusy(false)
+    }
+  }
+
+  function actualizarTipoDocumento(index, tipo_documento) {
+    setDocumentosLocales((prev) => prev.map((documento, idx) => (idx === index ? { ...documento, tipo_documento } : documento)))
+  }
+
+  function eliminarDocumento(index) {
+    setDocumentosLocales((prev) => prev.filter((_, idx) => idx !== index))
+  }
+
+  async function reenviarDocumentosVeterinaria() {
+    if (!veterinariaData?.id || !veterinariaData?.user_id || !documentosLocales.length) {
+      setVeterinariaError('Adjunta al menos un documento antes de reenviar la revisión.')
+      return
+    }
+    setDocumentoBusy(true)
+    setVeterinariaError('')
+    setVeterinariaSuccess('')
+    try {
+      const documentosSubidos = []
+      for (let index = 0; index < documentosLocales.length; index += 1) {
+        const documentoLocal = documentosLocales[index]
+        const archivoResp = await apiRequest('/api/archivos/', {
+          method: 'POST',
+          body: {
+            tipo_entidad: 'veterinaria_verificacion',
+            id_entidad: veterinariaData.user_id,
+            categoria: documentoLocal.tipo_documento || 'otro',
+            orden: index + 1,
+            servicio_origen: 'ms_seguridad',
+            nombre_original: documentoLocal.nombre_original,
+            contenido_base64: documentoLocal.contenido_base64,
+          },
+        })
+        if (!archivoResp.ok || !archivoResp.data?.id || !archivoResp.data?.url_descarga) {
+          throw new Error(archivoResp.data?.detail || 'No se pudo subir uno de los documentos')
+        }
+        documentosSubidos.push({
+          tipo_documento: documentoLocal.tipo_documento || 'otro',
+          archivo_id: archivoResp.data.id,
+          archivo_url: archivoResp.data.url_descarga,
+          archivo_nombre: archivoResp.data.nombre_original || documentoLocal.nombre_original,
+        })
+      }
+
+      const vincularResp = await apiRequest(`/api/auth/veterinarias/${veterinariaData.id}/`, {
+        method: 'PATCH',
+        body: {
+          documentos_verificacion: documentosSubidos,
+        },
+      })
+      if (!vincularResp.ok) {
+        throw new Error(vincularResp.data?.detail || 'No se pudieron asociar los documentos')
+      }
+
+      setVeterinariaData(vincularResp.data)
+      setDocumentosLocales([])
+      setVeterinariaSuccess('Documentos reenviados correctamente. La veterinaria volvió a estado pendiente para revisión.')
+    } catch (err) {
+      setVeterinariaError(err?.message || 'No se pudieron reenviar los documentos')
+    } finally {
+      setDocumentoBusy(false)
+    }
+  }
+
   return (
     <div className="mainInner">
       <div style={{ marginBottom: '16px' }}>
@@ -143,31 +275,90 @@ export default function PaginaPerfil({ user, authInicializando, reports, onLogou
         </div>
       </section>
 
-      {user?.role === 'veterinaria' && user?.veterinaria ? (
+      {user?.role === 'veterinaria' && veterinariaData ? (
         <section className="card" style={{ marginBottom: '28px' }}>
           <h3 className="cardTitle" style={{ marginTop: 0 }}>Estado de verificación de veterinaria</h3>
           <div className="mutedText" style={{ marginBottom: '12px' }}>
-            {user.veterinaria.estado_verificacion === 'aprobada'
+            {veterinariaData.estado_verificacion === 'aprobada'
               ? 'Tu veterinaria está aprobada y ya puede aparecer en el mapa y confirmar reportes.'
-              : user.veterinaria.estado_verificacion === 'rechazada'
+              : veterinariaData.estado_verificacion === 'rechazada'
                 ? 'La solicitud fue rechazada. Revisa el comentario del administrador.'
-                : 'Tu solicitud está pendiente. Un administrador revisará el documento antes de activarte.'}
+                : 'Tu solicitud está pendiente. Un administrador revisará los documentos antes de activarte.'}
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
             <span className="boPill">
-              Estado: {user.veterinaria.estado_verificacion || 'pendiente'}
+              Estado: {veterinariaData.estado_verificacion || 'pendiente'}
             </span>
-            {user.veterinaria.documento_verificacion_url ? (
-              <a className="miniBtn" href={user.veterinaria.documento_verificacion_url} target="_blank" rel="noreferrer">
-                Ver documento enviado
-              </a>
-            ) : null}
           </div>
-          {user.veterinaria.comentario_revision ? (
+          {documentosVeterinaria.length ? (
+            <div style={{ display: 'grid', gap: '10px', marginTop: '14px' }}>
+              {documentosVeterinaria.map((documento, index) => (
+                <div key={`${documento.archivo_id || 'doc'}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'center', padding: '10px 12px', border: '1px solid rgba(6, 74, 85, 0.12)', borderRadius: '12px' }}>
+                  <div>
+                    <div style={{ fontWeight: 800 }}>{documento.archivo_nombre || `Documento ${index + 1}`}</div>
+                    <div className="mutedText">{documento.tipo_documento_label || getVeterinaryDocumentTypeLabel(documento.tipo_documento)}</div>
+                  </div>
+                  <a className="miniBtn" href={documento.archivo_url} target="_blank" rel="noreferrer">
+                    Ver documento
+                  </a>
+                </div>
+              ))}
+            </div>
+          ) : (
             <div className="formError" style={{ marginTop: '12px' }}>
-              Comentario admin: {user.veterinaria.comentario_revision}
+              No hay documentos de verificación guardados para esta veterinaria.
+            </div>
+          )}
+          {veterinariaData.comentario_revision ? (
+            <div className="formError" style={{ marginTop: '12px' }}>
+              Comentario admin: {veterinariaData.comentario_revision}
             </div>
           ) : null}
+          <div style={{ marginTop: '16px', display: 'grid', gap: '12px' }}>
+            <label className="field" style={{ marginBottom: 0 }}>
+              <span>Reenviar documentos de verificación</span>
+              <input type="file" accept="image/*,application/pdf" onChange={handleDocumentosVeterinariaChange} multiple />
+            </label>
+            {documentosLocales.length ? (
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {documentosLocales.map((documento, index) => (
+                  <div key={`${documento.nombre_original || 'documento'}-${index}`} style={{ border: '1px solid rgba(6, 74, 85, 0.12)', borderRadius: '12px', padding: '12px', display: 'grid', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <strong>{documento.nombre_original}</strong>
+                      <button type="button" className="miniBtn danger" onClick={() => eliminarDocumento(index)}>Quitar</button>
+                    </div>
+                    <label className="field" style={{ marginBottom: 0 }}>
+                      <span>Tipo de documento</span>
+                      <select value={documento.tipo_documento || 'otro'} onChange={(e) => actualizarTipoDocumento(index, e.target.value)}>
+                        {VETERINARY_VERIFICATION_DOCUMENT_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {documento.vista_previa ? (
+                      <img
+                        src={documento.vista_previa}
+                        alt={documento.nombre_original || 'Documento de verificación'}
+                        style={{ width: '100%', maxHeight: '220px', objectFit: 'contain', borderRadius: '10px', background: '#f8f9fa' }}
+                      />
+                    ) : (
+                      <div style={{ padding: '14px', borderRadius: '10px', background: '#f8f9fa', color: '#475569', fontWeight: 700 }}>
+                        PDF listo para revisión
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {veterinariaError ? <div className="formError">{veterinariaError}</div> : null}
+            {veterinariaSuccess ? <div className="formSuccess">{veterinariaSuccess}</div> : null}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <button className="miniBtn" type="button" disabled={documentoBusy || !documentosLocales.length} onClick={reenviarDocumentosVeterinaria}>
+                {documentoBusy ? 'Enviando documentos...' : 'Reenviar documentos'}
+              </button>
+              <div className="mutedText">Si tu registro se creó mientras el sistema rechazaba el guardado, puedes reenviar los respaldos desde aquí.</div>
+            </div>
+          </div>
         </section>
       ) : null}
 

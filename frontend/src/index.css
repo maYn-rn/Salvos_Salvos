@@ -1177,6 +1177,26 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.adminCreateForm {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(11, 18, 32, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.adminCreateFormGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.adminCreateFormGrid input {
+  width: 100%;
+}
+
 .boApp {
   min-height: 100vh;
   background: var(--sand-50);
@@ -1680,6 +1700,26 @@ a {
 
 .field .fieldControl input {
   padding-left: 42px;
+  padding-right: 92px;
+}
+
+.fieldToggleBtn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--teal-700);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.fieldToggleBtn:hover {
+  background: rgba(25, 166, 182, 0.08);
 }
 
 .field input {
@@ -1885,6 +1925,75 @@ a {
 
 .reportMap {
   height: 620px;
+}
+
+.reportDetailQuickInfo,
+.reportDetailHighlights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.reportDetailHighlights {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.reportDetailMiniStat,
+.reportDetailHighlight {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 118, 135, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reportDetailMiniLabel {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  color: rgba(11, 18, 32, 0.55);
+  text-transform: uppercase;
+}
+
+.reportDetailMiniStat strong,
+.reportDetailHighlight strong {
+  color: rgba(6, 74, 85, 0.95);
+  font-size: 15px;
+}
+
+.reportDetailMiniMapWrap {
+  height: 260px;
+}
+
+.reportDetailMiniMap {
+  height: 260px;
+  width: 100%;
+}
+
+.reportDetailContactActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.reportDetailProtectedContact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 118, 135, 0.18);
+  background: rgba(15, 118, 135, 0.08);
+  color: rgba(6, 74, 85, 0.95);
+}
+
+.reportDetailProtectedContact strong {
+  font-size: 14px;
 }
 
 .mapWrap {
@@ -2167,9 +2276,31 @@ a {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+  align-items: stretch;
+}
+
+.nearbyAlertsGrid.count-1,
+.nearbyAlertsGrid.count-2,
+.nearbyAlertsGrid.count-3 {
+  justify-content: center;
+}
+
+.nearbyAlertsGrid.count-1 {
+  grid-template-columns: minmax(0, 280px);
+}
+
+.nearbyAlertsGrid.count-2 {
+  grid-template-columns: repeat(2, minmax(0, 280px));
+}
+
+.nearbyAlertsGrid.count-3 {
+  grid-template-columns: repeat(3, minmax(0, 280px));
 }
 
 .nearbyAlertCard {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
   text-align: left;
   border: 1px solid rgba(15, 118, 135, 0.14);
   background: rgba(255, 255, 255, 0.74);
@@ -2191,8 +2322,11 @@ a {
 
 .nearbyAlertImgWrap {
   position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
   width: 100%;
   aspect-ratio: 16 / 9;
+  min-height: 180px;
   background: #eef3f4;
   border-bottom: 1px solid rgba(15, 118, 135, 0.12);
 }
@@ -2201,6 +2335,7 @@ a {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
 }
 
@@ -2247,6 +2382,7 @@ a {
 }
 
 .nearbyAlertBody {
+  min-width: 0;
   padding: 12px 12px 10px;
   display: flex;
   flex-direction: column;
@@ -2259,6 +2395,7 @@ a {
   font-weight: 950;
   color: rgba(6, 74, 85, 0.96);
   margin-bottom: 2px;
+  overflow-wrap: anywhere;
 }
 
 .nearbyAlertMeta {
@@ -2302,14 +2439,369 @@ a {
   font-weight: 800;
 }
 
+.homeActionsSection {
+  padding-top: 4px;
+}
+
+.homeActionsHeader {
+  margin-bottom: 16px;
+}
+
+.homeActionsTitle {
+  margin: 0;
+  color: rgba(6, 74, 85, 0.96);
+  font-size: clamp(1.8rem, 2.3vw, 2.2rem);
+  font-weight: 950;
+  letter-spacing: -0.4px;
+}
+
+.homeActionsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.homeActionCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 100%;
+  padding: 22px 20px;
+  border-radius: 22px;
+  border: 1px solid rgba(15, 118, 135, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 16px 36px rgba(6, 74, 85, 0.07);
+}
+
+.homeActionIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.homeActionIconOrange {
+  background: #ff6b35;
+  color: #fff;
+}
+
+.homeActionIconTeal {
+  background: #19a6b6;
+  color: #fff;
+}
+
+.homeActionIconGold {
+  background: #f4b740;
+  color: #fff;
+}
+
+.homeActionContent {
+  display: grid;
+  gap: 6px;
+}
+
+.homeActionContent h3 {
+  margin: 0;
+  color: rgba(6, 74, 85, 0.96);
+  font-size: 1.28rem;
+  font-weight: 950;
+}
+
+.homeActionContent p {
+  margin: 0;
+  color: rgba(11, 18, 32, 0.7);
+  line-height: 1.55;
+}
+
+.homeActionBtn {
+  margin-top: auto;
+  min-width: 170px;
+  text-align: center;
+  text-decoration: none;
+  padding: 11px 18px;
+  border-radius: 14px;
+  font-weight: 900;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.homeActionBtn:hover {
+  transform: translateY(-1px);
+}
+
+.homeActionBtnOrange {
+  background: #ff6b35;
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(255, 107, 53, 0.24);
+}
+
+.homeActionBtnTeal {
+  background: rgba(25, 166, 182, 0.1);
+  color: rgba(6, 74, 85, 0.96);
+  border: 1px solid rgba(25, 166, 182, 0.35);
+}
+
+.homeActionBtnGold {
+  background: rgba(244, 183, 64, 0.1);
+  color: rgba(146, 97, 0, 0.95);
+  border: 1px solid rgba(244, 183, 64, 0.35);
+}
+
+.featuredVets {
+  display: grid;
+  gap: 18px;
+}
+
+.featuredVetsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.featuredVetsTitle {
+  margin: 0 0 6px;
+  color: rgba(6, 74, 85, 0.96);
+  font-size: clamp(1.8rem, 2.3vw, 2.2rem);
+  font-weight: 950;
+  letter-spacing: -0.4px;
+}
+
+.featuredVetsLead {
+  margin: 0;
+  max-width: 720px;
+  color: rgba(11, 18, 32, 0.7);
+  line-height: 1.6;
+}
+
+.featuredVetsActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.featuredVetsRegisterBtn {
+  text-decoration: none;
+  padding: 11px 18px;
+  border-radius: 14px;
+  background: rgba(25, 166, 182, 0.1);
+  color: rgba(6, 74, 85, 0.96);
+  border: 1px solid rgba(25, 166, 182, 0.35);
+  font-weight: 900;
+}
+
+.featuredVetsNav {
+  display: inline-flex;
+  gap: 10px;
+}
+
+.featuredVetsNavBtn {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 118, 135, 0.16);
+  background: rgba(255, 255, 255, 0.88);
+  color: rgba(6, 74, 85, 0.96);
+  font-size: 26px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 24px rgba(6, 74, 85, 0.08);
+}
+
+.featuredVetsNavBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+}
+
+.featuredVetsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.featuredVetsGrid.count-1,
+.featuredVetsGrid.count-2,
+.featuredVetsGrid.count-3 {
+  justify-content: center;
+}
+
+.featuredVetsGrid.count-1 {
+  grid-template-columns: minmax(0, 280px);
+}
+
+.featuredVetsGrid.count-2 {
+  grid-template-columns: repeat(2, minmax(0, 280px));
+}
+
+.featuredVetsGrid.count-3 {
+  grid-template-columns: repeat(3, minmax(0, 280px));
+}
+
+.featuredVetCard {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(15, 118, 135, 0.12);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 16px 36px rgba(6, 74, 85, 0.07);
+}
+
+.featuredVetBanner {
+  position: relative;
+  min-height: 132px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), transparent 48%),
+    linear-gradient(135deg, rgba(25, 166, 182, 0.22), rgba(244, 183, 64, 0.2));
+}
+
+.featuredVetSeal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(6, 74, 85, 0.94);
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.featuredVetAvatar {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 66px;
+  height: 66px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.94);
+  color: rgba(6, 74, 85, 0.96);
+  font-size: 1.25rem;
+  font-weight: 950;
+  box-shadow: 0 12px 28px rgba(6, 74, 85, 0.14);
+}
+
+.featuredVetBody {
+  display: grid;
+  gap: 10px;
+  padding: 18px 18px 16px;
+}
+
+.featuredVetName {
+  color: rgba(6, 74, 85, 0.96);
+  font-size: 1.14rem;
+  font-weight: 950;
+}
+
+.featuredVetMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(11, 18, 32, 0.68);
+  font-size: 0.95rem;
+}
+
+.featuredVetMetaIcon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.featuredVetDescription {
+  margin: 0;
+  color: rgba(11, 18, 32, 0.7);
+  line-height: 1.55;
+  min-height: 72px;
+}
+
+.featuredVetFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.featuredVetLinkBtn,
+.featuredVetSiteLink {
+  text-decoration: none;
+  font-weight: 900;
+}
+
+.featuredVetLinkBtn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: rgba(6, 74, 85, 0.96);
+  cursor: pointer;
+}
+
+.featuredVetSiteLink {
+  color: #19a6b6;
+}
+
+.featuredVetsEmpty {
+  display: grid;
+  gap: 6px;
+  padding: 22px 20px;
+  border-radius: 22px;
+  border: 1px dashed rgba(15, 118, 135, 0.24);
+  background: rgba(255, 255, 255, 0.7);
+  color: rgba(11, 18, 32, 0.72);
+}
+
 @media (max-width: 980px) {
-  .nearbyAlertsGrid {
+  .nearbyAlertsGrid,
+  .nearbyAlertsGrid.count-3,
+  .nearbyAlertsGrid.count-4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .homeActionsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .featuredVetsHeader {
+    flex-direction: column;
+  }
+
+  .featuredVetsActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .featuredVetsGrid,
+  .featuredVetsGrid.count-3,
+  .featuredVetsGrid.count-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nearbyAlertImgWrap {
+    min-height: 160px;
   }
 }
 
 @media (max-width: 640px) {
-  .nearbyAlertsGrid {
+  .nearbyAlertsGrid,
+  .nearbyAlertsGrid.count-1,
+  .nearbyAlertsGrid.count-2,
+  .nearbyAlertsGrid.count-3,
+  .nearbyAlertsGrid.count-4 {
     grid-auto-flow: column;
     grid-auto-columns: minmax(260px, 1fr);
     grid-template-columns: none;
@@ -2320,6 +2812,32 @@ a {
 
   .nearbyAlertCard {
     scroll-snap-align: start;
+  }
+
+  .nearbyAlertImgWrap {
+    min-height: 150px;
+  }
+
+  .featuredVetsActions {
+    align-items: stretch;
+  }
+
+  .featuredVetsRegisterBtn {
+    text-align: center;
+    width: 100%;
+  }
+
+  .featuredVetsNav {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .featuredVetsGrid,
+  .featuredVetsGrid.count-1,
+  .featuredVetsGrid.count-2,
+  .featuredVetsGrid.count-3,
+  .featuredVetsGrid.count-4 {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -3308,6 +3826,13 @@ a {
     overflow-x: auto;
   }
   .adminForm {
+    grid-template-columns: 1fr;
+  }
+  .adminCreateFormGrid {
+    grid-template-columns: 1fr;
+  }
+  .reportDetailQuickInfo,
+  .reportDetailHighlights {
     grid-template-columns: 1fr;
   }
   .boLayout {

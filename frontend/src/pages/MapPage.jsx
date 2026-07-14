@@ -79,7 +79,7 @@ export default function MapPage({ center, zoom, reports, lastCreatedReportId, us
               <div className="mapFiltersForm">
                 <label className="field">
                   <span>Buscar</span>
-                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nombre, especie o zona..." />
+                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre, especie, comuna o región" />
                 </label>
 
                 <label className="field">

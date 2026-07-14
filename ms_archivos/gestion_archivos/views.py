@@ -21,6 +21,7 @@ TIPOS_MIME_PERMITIDOS = {
     'image/png': '.png',
     'image/webp': '.webp',
     'image/gif': '.gif',
+    'application/pdf': '.pdf',
 }
 
 
@@ -211,7 +212,13 @@ def _validar_limites(contenido: bytes, tipo_entidad: str, id_entidad: int):
     if not contenido:
         return JsonResponse({'detail': 'archivo_vacio'}, status=400)
     if len(contenido) > settings.LIMITE_TAMANO_ARCHIVO_BYTES:
-        return JsonResponse({'detail': 'archivo_demasiado_grande'}, status=400)
+        return JsonResponse(
+            {
+                'detail': 'archivo_demasiado_grande',
+                'max_bytes': settings.LIMITE_TAMANO_ARCHIVO_BYTES,
+            },
+            status=400,
+        )
     cantidad_actual = Archivo.objects.filter(
         tipo_entidad=tipo_entidad,
         id_entidad=id_entidad,

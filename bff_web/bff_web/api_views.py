@@ -188,8 +188,15 @@ def auth_me(request):
     return _forward(request, settings.SECURITY_SERVICE_BASE_URL)
 
 def auth_users(request):
-    if request.method != 'GET':
-        return HttpResponseNotAllowed(['GET'])
+    if request.method not in {'GET', 'POST'}:
+        return HttpResponseNotAllowed(['GET', 'POST'])
+    return _forward(request, settings.SECURITY_SERVICE_BASE_URL)
+
+
+@csrf_exempt
+def auth_user_detail(request, user_id: int):
+    if request.method not in {'PATCH', 'OPTIONS'}:
+        return HttpResponseNotAllowed(['PATCH', 'OPTIONS'])
     return _forward(request, settings.SECURITY_SERVICE_BASE_URL)
 
 
@@ -199,9 +206,24 @@ def auth_veterinarias(request):
     return _forward(request, settings.SECURITY_SERVICE_BASE_URL)
 
 
+@csrf_exempt
 def auth_veterinaria_detail(request, veterinaria_id: int):
-    if request.method not in {'GET', 'PATCH'}:
-        return HttpResponseNotAllowed(['GET', 'PATCH'])
+    if request.method not in {'GET', 'PATCH', 'OPTIONS'}:
+        return HttpResponseNotAllowed(['GET', 'PATCH', 'OPTIONS'])
+    return _forward(request, settings.SECURITY_SERVICE_BASE_URL)
+
+
+@csrf_exempt
+def faqs_proxy(request):
+    if request.method not in {'GET', 'POST', 'OPTIONS'}:
+        return HttpResponseNotAllowed(['GET', 'POST', 'OPTIONS'])
+    return _forward(request, settings.SECURITY_SERVICE_BASE_URL)
+
+
+@csrf_exempt
+def faq_detail_proxy(request, faq_id: int):
+    if request.method not in {'PATCH', 'OPTIONS'}:
+        return HttpResponseNotAllowed(['PATCH', 'OPTIONS'])
     return _forward(request, settings.SECURITY_SERVICE_BASE_URL)
 
 

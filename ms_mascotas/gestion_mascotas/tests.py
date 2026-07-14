@@ -66,6 +66,9 @@ class PruebasVisibilidadReportes(TestCase):
             latitude=-33.45,
             longitude=-70.66,
             status='perdido',
+            contact_name='Matias',
+            contact_phone='+56912345678',
+            contact_email='matias@ejemplo.com',
             reporter_id=1,
             is_confirmed=True,
             confirmed_at=timezone.now(),
@@ -82,6 +85,9 @@ class PruebasVisibilidadReportes(TestCase):
             latitude=-33.43,
             longitude=-70.61,
             status='perdido',
+            contact_name='Owner',
+            contact_phone='+56987654321',
+            contact_email='owner@ejemplo.com',
             reporter_id=2,
             is_confirmed=False,
             confirmed_at=None,
@@ -95,6 +101,24 @@ class PruebasVisibilidadReportes(TestCase):
         ids = [r['id'] for r in data['results']]
         self.assertIn(self.confirmed.id, ids)
         self.assertNotIn(self.unconfirmed.id, ids)
+        public_report = next(r for r in data['results'] if r['id'] == self.confirmed.id)
+        self.assertEqual(public_report['contact_phone'], '')
+        self.assertEqual(public_report['contact_email'], '')
+        self.assertFalse(public_report['contact_details_visible'])
+
+    def test_detalle_confirmado_oculta_contacto_sin_sesion_y_lo_muestra_con_sesion(self):
+        resp_publico = self.client.get(f'/api/reports/{self.confirmed.id}/')
+        self.assertEqual(resp_publico.status_code, 200)
+        self.assertEqual(resp_publico.json()['contact_phone'], '')
+        self.assertEqual(resp_publico.json()['contact_email'], '')
+        self.assertFalse(resp_publico.json()['contact_details_visible'])
+
+        token_usuario = crear_token_acceso(77, username='logueado', es_staff=False)
+        resp_privado = self.client.get(f'/api/reports/{self.confirmed.id}/', **encabezados_autorizacion(token_usuario))
+        self.assertEqual(resp_privado.status_code, 200)
+        self.assertEqual(resp_privado.json()['contact_phone'], '+56912345678')
+        self.assertEqual(resp_privado.json()['contact_email'], 'matias@ejemplo.com')
+        self.assertTrue(resp_privado.json()['contact_details_visible'])
 
     def test_listar_include_unconfirmed_requiere_admin(self):
         token_usuario = crear_token_acceso(10, es_staff=False)

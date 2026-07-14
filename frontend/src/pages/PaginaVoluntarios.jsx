@@ -34,15 +34,15 @@ export default function PaginaVoluntarios({ user }) {
           <form className="form" onSubmit={handleSubmit}>
             <label className="field">
               <span>Nombre Completo</span>
-              <input required placeholder="Ej: Juan Pérez" defaultValue={user?.username || ''} />
+              <input required placeholder="Nombre completo" defaultValue={user?.username || ''} />
             </label>
             <label className="field">
               <span>Email de contacto</span>
-              <input type="email" required placeholder="correo@ejemplo.com" defaultValue={user?.email || ''} />
+              <input type="email" required placeholder="nombre@dominio.cl" defaultValue={user?.email || ''} />
             </label>
             <label className="field">
               <span>¿Por qué quieres ser voluntario?</span>
-              <textarea required rows="4" placeholder="Cuéntanos un poco sobre ti, si tienes experiencia previa rescatando mascotas o simplemente quieres ayudar a la comunidad..." style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem', fontFamily: 'inherit' }}></textarea>
+              <textarea required rows="4" placeholder="Describe tu experiencia, disponibilidad y cómo te gustaría colaborar" style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem', fontFamily: 'inherit' }}></textarea>
             </label>
             <button className="primaryBtn" type="submit" style={{ width: '100%', padding: '14px', fontSize: '1.1rem', marginTop: '10px' }}>
               Enviar Postulación

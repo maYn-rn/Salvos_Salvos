@@ -149,7 +149,7 @@ export default function PaginaAdminReportes({ search }) {
                         setError('')
                         confirmReport(r.id).catch((e) => setError(e?.message || 'Error')).finally(() => setLoading(false))
                       }}>
-                        Confirmar
+                        Publicar
                       </button>
                     ) : null}
                     <button className="miniBtn" type="button" disabled={loading} onClick={() => startEdit(r)}>

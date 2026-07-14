@@ -148,7 +148,7 @@ def _public_images(report: LostPetReport) -> list[dict]:
     return []
 
 
-def _report_to_dict(report: LostPetReport, include_image: bool = False) -> dict:
+def _report_to_dict(report: LostPetReport, include_image: bool = False, include_contact: bool = False) -> dict:
     images = _public_images(report)
     cover_image = images[0]['url_descarga'] if images else report.image_data_url
     data = {
@@ -163,8 +163,9 @@ def _report_to_dict(report: LostPetReport, include_image: bool = False) -> dict:
         'last_seen_at': report.last_seen_at.isoformat() if report.last_seen_at else None,
         'status': report.status,
         'contact_name': report.contact_name,
-        'contact_phone': report.contact_phone,
-        'contact_email': report.contact_email,
+        'contact_phone': report.contact_phone if include_contact else '',
+        'contact_email': report.contact_email if include_contact else '',
+        'contact_details_visible': bool(include_contact),
         'reporter_id': report.reporter_id,
         'is_confirmed': report.is_confirmed,
         'confirmed_at': report.confirmed_at.isoformat() if report.confirmed_at else None,
@@ -219,7 +220,7 @@ def reports(request):
         if species:
             qs = qs.filter(species__iexact=species)
 
-        data = [_report_to_dict(r, include_image=include_image) for r in qs[:200]]
+        data = [_report_to_dict(r, include_image=include_image, include_contact=payload is not None) for r in qs[:200]]
         return JsonResponse({'results': data}, status=200)
 
     if request.method == 'POST':
@@ -316,7 +317,7 @@ def reports(request):
             confirmed_at=None,
             confirmed_by='',
         )
-        return JsonResponse(_report_to_dict(report, include_image=False), status=201)
+        return JsonResponse(_report_to_dict(report, include_image=False, include_contact=True), status=201)
 
     return HttpResponseNotAllowed(['GET', 'POST'])
 
@@ -330,7 +331,8 @@ def report_detail(request, report_id: int):
 
     if request.method == 'GET':
         if report.is_confirmed:
-            return JsonResponse(_report_to_dict(report, include_image=True), status=200)
+            payload = _get_access_payload(request)
+            return JsonResponse(_report_to_dict(report, include_image=True, include_contact=payload is not None), status=200)
         payload = _get_access_payload(request)
         if payload is not None:
             try:
@@ -338,7 +340,7 @@ def report_detail(request, report_id: int):
             except (TypeError, ValueError):
                 is_owner = False
             if _puede_confirmar_reportes(payload) or is_owner:
-                return JsonResponse(_report_to_dict(report, include_image=True), status=200)
+                return JsonResponse(_report_to_dict(report, include_image=True, include_contact=True), status=200)
         return JsonResponse({'detail': 'not_found'}, status=404)
 
     payload = _get_access_payload(request)

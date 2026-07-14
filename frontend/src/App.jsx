@@ -16,7 +16,17 @@ import PaginaReporte from './pages/PaginaReporte'
 import PaginaVeterinariaDetalle from './pages/PaginaVeterinariaDetalle'
 // 1. IMPORTAMOS LA PÁGINA REAL DE VOLUNTARIOS
 import PaginaVoluntarios from './pages/PaginaVoluntarios' 
-import { apiRequest, haversineKm, optimizeImageFileToDataUrl, refreshAccess, REGION_VIEW, setAccessToken } from './shared/appCore'
+import {
+  apiRequest,
+  formatFileSize,
+  haversineKm,
+  MAX_IMAGE_OUTPUT_BYTES,
+  MAX_IMAGE_UPLOAD_BYTES,
+  optimizeImageFileToDataUrl,
+  refreshAccess,
+  REGION_VIEW,
+  setAccessToken,
+} from './shared/appCore'
 
 function App() {
   const year = new Date().getFullYear()
@@ -43,11 +53,12 @@ function App() {
     direccion_veterinaria: '',
     descripcion_veterinaria: '',
     sitio_web_veterinaria: '',
-    documento_verificacion_local: null,
+    documentos_verificacion_locales: [],
     latitude: null,
     longitude: null,
   })
   const [reports, setReports] = useState([])
+  const [featuredVeterinarias, setFeaturedVeterinarias] = useState([])
   const [lastCreatedReportId, setLastCreatedReportId] = useState(null)
   const [reportForm, setReportForm] = useState({
     pet_name: '',
@@ -95,12 +106,15 @@ function App() {
     ;(async () => {
       setAuthInicializando(true)
       try {
-        const ok = await refreshAccess()
-        if (!ok) {
-          setUser(null)
-          return
+        let me = await apiRequest('/api/auth/me/', { method: 'GET' })
+        if (!me.ok) {
+          const ok = await refreshAccess()
+          if (!ok) {
+            setUser(null)
+            return
+          }
+          me = await apiRequest('/api/auth/me/', { method: 'GET' })
         }
-        const me = await apiRequest('/api/auth/me/', { method: 'GET' })
         if (me.ok) setUser(me.data)
         else setUser(null)
       } finally {
@@ -110,9 +124,18 @@ function App() {
   }, [])
 
   async function loadReports() {
-    const resp = await apiRequest('/api/reports/', { method: 'GET' })
+    const resp = await apiRequest('/api/reports/?include_image=1', { method: 'GET' })
     if (resp.ok && resp.data?.results) {
       setReports(resp.data.results)
+    }
+  }
+
+  async function loadFeaturedVeterinarias() {
+    const resp = await apiRequest('/api/auth/veterinarias/', { method: 'GET' })
+    if (resp.ok && resp.data?.results) {
+      setFeaturedVeterinarias(resp.data.results.slice(0, 12))
+    } else {
+      setFeaturedVeterinarias([])
     }
   }
 
@@ -145,6 +168,7 @@ function App() {
 
   useEffect(() => {
     loadReports()
+    loadFeaturedVeterinarias()
   }, [])
 
   useEffect(() => {
@@ -322,13 +346,13 @@ function App() {
     try {
       const imagenesLocales = []
       for (const archivo of archivosLimitados) {
-        if (archivo.size > 10_000_000) {
-          setError(`La imagen "${archivo.name}" es muy grande. Usa una de máximo 10MB.`)
+        if (archivo.size > MAX_IMAGE_UPLOAD_BYTES) {
+          setError(`La imagen "${archivo.name}" es muy grande. Usa una de máximo ${formatFileSize(MAX_IMAGE_UPLOAD_BYTES)}.`)
           e.target.value = ''
           return
         }
 
-        const dataUrl = await optimizeImageFileToDataUrl(archivo, { maxEdge: 1400, maxBytes: 650_000 })
+        const dataUrl = await optimizeImageFileToDataUrl(archivo, { maxEdge: 1400, maxBytes: MAX_IMAGE_OUTPUT_BYTES })
         if (!dataUrl) {
           setError(`No se pudo procesar la imagen "${archivo.name}"`)
           e.target.value = ''
@@ -379,37 +403,47 @@ function App() {
     return imagenesSubidas
   }
 
-  async function subirDocumentoVerificacion(veterinaria, documentoLocal) {
-    if (!veterinaria?.user_id || !documentoLocal?.contenido_base64) {
-      throw new Error('Debes adjuntar un documento de verificación válido')
+  async function subirDocumentosVerificacion(veterinaria, documentosLocales) {
+    if (!veterinaria?.user_id || !Array.isArray(documentosLocales) || !documentosLocales.length) {
+      throw new Error('Debes adjuntar al menos un documento de verificación válido')
     }
-
-    const resp = await apiRequest('/api/archivos/', {
-      method: 'POST',
-      body: {
-        tipo_entidad: 'veterinaria_verificacion',
-        id_entidad: veterinaria.user_id,
-        categoria: 'verificacion',
-        orden: 1,
-        servicio_origen: 'ms_seguridad',
-        nombre_original: documentoLocal.nombre_original,
-        contenido_base64: documentoLocal.contenido_base64,
-      },
-    })
-    if (!resp.ok || !resp.data?.id || !resp.data?.url_descarga) {
-      throw new Error(resp.data?.detail || 'No se pudo subir el documento de verificación')
+    const documentosSubidos = []
+    for (let index = 0; index < documentosLocales.length; index += 1) {
+      const documentoLocal = documentosLocales[index]
+      if (!documentoLocal?.contenido_base64) {
+        throw new Error('Debes adjuntar al menos un documento de verificación válido')
+      }
+      const resp = await apiRequest('/api/archivos/', {
+        method: 'POST',
+        body: {
+          tipo_entidad: 'veterinaria_verificacion',
+          id_entidad: veterinaria.user_id,
+          categoria: documentoLocal.tipo_documento || 'otro',
+          orden: index + 1,
+          servicio_origen: 'ms_seguridad',
+          nombre_original: documentoLocal.nombre_original,
+          contenido_base64: documentoLocal.contenido_base64,
+        },
+      })
+      if (!resp.ok || !resp.data?.id || !resp.data?.url_descarga) {
+        throw new Error(resp.data?.detail || 'No se pudo subir uno de los documentos de verificación')
+      }
+      documentosSubidos.push({
+        tipo_documento: documentoLocal.tipo_documento || 'otro',
+        archivo_id: resp.data.id,
+        archivo_url: resp.data.url_descarga,
+        archivo_nombre: resp.data.nombre_original || documentoLocal.nombre_original,
+      })
     }
 
     const vincularResp = await apiRequest(`/api/auth/veterinarias/${veterinaria.id}/`, {
       method: 'PATCH',
       body: {
-        documento_verificacion_archivo_id: resp.data.id,
-        documento_verificacion_url: resp.data.url_descarga,
-        documento_verificacion_nombre: resp.data.nombre_original || documentoLocal.nombre_original,
+        documentos_verificacion: documentosSubidos,
       },
     })
     if (!vincularResp.ok) {
-      throw new Error(vincularResp.data?.detail || 'No se pudo asociar el documento de verificación')
+      throw new Error(vincularResp.data?.detail || 'No se pudieron asociar los documentos de verificación')
     }
     return vincularResp.data
   }
@@ -476,8 +510,8 @@ function App() {
           setBusy(false)
           return
         }
-        if (!authForm.documento_verificacion_local?.contenido_base64) {
-          setError('Debes adjuntar un documento o imagen que respalde la veterinaria')
+        if (!authForm.documentos_verificacion_locales?.length) {
+          setError('Debes adjuntar al menos un documento que respalde la veterinaria')
           setBusy(false)
           return
         }
@@ -514,21 +548,30 @@ function App() {
 
       const resp = await apiRequest(path, { method: 'POST', body })
       if (!resp.ok || !resp.data?.access) {
-        setError(resp.data?.detail || 'No se pudo autenticar')
+        const detail = resp.data?.detail
+        if (authMode === 'register' && detail === 'username_already_exists') {
+          const base = (authForm.username || '').trim()
+          const suffix = String(Math.floor(100 + Math.random() * 900))
+          const suggestion = base ? `${base}_${suffix}` : ''
+          setError(
+            `Ese nombre de usuario ya existe. Inicia sesión con esa cuenta o usa otro.${suggestion ? ` Sugerencia: ${suggestion}` : ''}`
+          )
+        } else {
+          setError(detail || 'No se pudo autenticar')
+        }
         return
       }
 
       setAccessToken(resp.data.access)
-      if (resp.data?.refresh) localStorage.setItem('refresh_token', resp.data.refresh)
       const me = await apiRequest('/api/auth/me/', { method: 'GET' })
       let currentUser = null
       if (me.ok) {
         currentUser = me.data
         if (authMode === 'register' && currentUser?.role === 'veterinaria') {
-          currentUser = await subirDocumentoVerificacion(currentUser.veterinaria, authForm.documento_verificacion_local)
+          currentUser = await subirDocumentosVerificacion(currentUser.veterinaria, authForm.documentos_verificacion_locales)
             .then(() => apiRequest('/api/auth/me/', { method: 'GET' }))
             .then((updatedMe) => (updatedMe.ok ? updatedMe.data : currentUser))
-          setSuccess('Registro enviado. La veterinaria quedará pendiente hasta que un administrador revise el documento.')
+          setSuccess('Registro enviado. La veterinaria quedará pendiente hasta que un administrador revise los documentos.')
         }
         setUser(currentUser)
       }
@@ -549,7 +592,6 @@ function App() {
     try {
       await apiRequest('/api/auth/logout/', { method: 'POST', body: {} })
       setAccessToken(null)
-      localStorage.removeItem('refresh_token')
       setUser(null)
       navigate('/', { replace: true })
     } finally {
@@ -688,13 +730,13 @@ function App() {
         element={
           <div className="appShell">
             <main className="siteMain" role="main">
-              <PanelAdministracion user={user} onLogout={doLogout} busy={busy} />
+              <PanelAdministracion user={user} onLogout={doLogout} busy={busy} authInicializando={authInicializando} />
             </main>
           </div>
         }
       />
 
-      <Route element={<DisposicionPublica user={user} isAdmin={isAdmin} canModerateReports={canModerateReports} busy={busy} onLogout={doLogout} year={year} />}>
+      <Route element={<DisposicionPublica user={user} isAdmin={isAdmin} canModerateReports={canModerateReports} busy={busy} onLogout={doLogout} year={year} onGoHome={resetDetailView} />}>
         <Route
           path="/"
           element={
@@ -712,10 +754,12 @@ function App() {
               userLocation={userLocation}
               lastCreatedReportId={lastCreatedReportId}
               nearbyRecentReports={nearbyRecentReports}
+              featuredVeterinarias={featuredVeterinarias}
               heroStats={heroStats}
               heroHighlight={heroHighlight}
               onMarkFound={markReportAsFound}
               onViewDetail={handleViewDetail}
+              onViewVeterinaria={(id) => navigate(`/veterinarias/${id}`)}
               onResetDetail={resetDetailView}
             />
           }

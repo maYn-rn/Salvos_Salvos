@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { apiRequest, formatDateShort, normalizeSpecies, optimizeImageFileToDataUrl } from '../shared/appCore'
+import {
+  apiRequest,
+  formatDateShort,
+  formatFileSize,
+  MAX_IMAGE_OUTPUT_BYTES,
+  MAX_IMAGE_UPLOAD_BYTES,
+  normalizeSpecies,
+  optimizeImageFileToDataUrl,
+} from '../shared/appCore'
 
 export default function CarruselReportesRecientes({ title, reports, user, onCardClick }) {
   const trackRef = useRef(null)
@@ -126,14 +134,14 @@ export default function CarruselReportesRecientes({ title, reports, user, onCard
       setLeadForm((s) => ({ ...s, imagen_local: null, nombre_archivo: '' }))
       return
     }
-    if (file.size > 10_000_000) {
-      setLeadError('La imagen es muy grande. Usa una de maximo 10MB.')
+    if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+      setLeadError(`La imagen es muy grande. Usa una de maximo ${formatFileSize(MAX_IMAGE_UPLOAD_BYTES)}.`)
       e.target.value = ''
       return
     }
     setLeadError('')
     try {
-      const dataUrl = await optimizeImageFileToDataUrl(file, { maxEdge: 1400, maxBytes: 650_000 })
+      const dataUrl = await optimizeImageFileToDataUrl(file, { maxEdge: 1400, maxBytes: MAX_IMAGE_OUTPUT_BYTES })
       if (!dataUrl) {
         setLeadError('No se pudo procesar la imagen')
         e.target.value = ''
@@ -344,7 +352,7 @@ export default function CarruselReportesRecientes({ title, reports, user, onCard
                 <input
                   value={leadForm.found_location}
                   onChange={(e) => setLeadForm((s) => ({ ...s, found_location: e.target.value }))}
-                  placeholder="Ej: Recoleta, cerca de Av. X"
+                  placeholder="Ej.: Recoleta, a una cuadra de Av. Providencia"
                 />
               </label>
 

@@ -3,8 +3,11 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import {
   apiRequest,
+  formatFileSize,
   formatDateShort,
   getComunasForRegion,
+  MAX_IMAGE_OUTPUT_BYTES,
+  MAX_IMAGE_UPLOAD_BYTES,
   optimizeImageFileToDataUrl,
   REGION_COMUNAS,
   SPECIES_OPTIONS,
@@ -214,7 +217,7 @@ export default function PaginaAdopciones({ user }) {
         <form className="adoptionsTopFilters" onSubmit={onFilterSubmit}>
           <label className="field adoptionsSearchField">
             <span>Buscar</span>
-            <input value={filters.q} onChange={(e) => updateFilters({ q: e.target.value })} placeholder="Nombre, raza, comuna o albergue" />
+            <input value={filters.q} onChange={(e) => updateFilters({ q: e.target.value })} placeholder="Busca por nombre, raza, comuna o albergue" />
           </label>
 
           <label className="field">
@@ -366,13 +369,13 @@ export function PaginaPublicarAdopcion({ user }) {
     try {
       const localImages = []
       for (const file of limitedFiles) {
-        if (file.size > 10_000_000) {
-          setError(`La imagen "${file.name}" es muy grande. Usa una de máximo 10MB.`)
+        if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+          setError(`La imagen "${file.name}" es muy grande. Usa una de máximo ${formatFileSize(MAX_IMAGE_UPLOAD_BYTES)}.`)
           e.target.value = ''
           return
         }
 
-        const dataUrl = await optimizeImageFileToDataUrl(file, { maxEdge: 1400, maxBytes: 650_000 })
+        const dataUrl = await optimizeImageFileToDataUrl(file, { maxEdge: 1400, maxBytes: MAX_IMAGE_OUTPUT_BYTES })
         if (!dataUrl) {
           setError(`No se pudo procesar la imagen "${file.name}"`)
           e.target.value = ''
@@ -557,7 +560,7 @@ export function PaginaPublicarAdopcion({ user }) {
         <form className="form adoptionsFormGrid" onSubmit={onSubmitAdoption}>
           <label className="field">
             <span>Nombre de la mascota</span>
-            <input value={form.pet_name} onChange={(e) => updateForm({ pet_name: e.target.value })} placeholder="Ej: Luna" />
+            <input value={form.pet_name} onChange={(e) => updateForm({ pet_name: e.target.value })} placeholder="Nombre de la mascota" />
           </label>
 
           <label className="field">
@@ -572,12 +575,12 @@ export function PaginaPublicarAdopcion({ user }) {
 
           <label className="field">
             <span>Raza</span>
-            <input value={form.breed} onChange={(e) => updateForm({ breed: e.target.value })} placeholder="Ej: Mestizo" />
+            <input value={form.breed} onChange={(e) => updateForm({ breed: e.target.value })} placeholder="Raza o mezcla" />
           </label>
 
           <label className="field">
             <span>Edad aproximada</span>
-            <input value={form.age_label} onChange={(e) => updateForm({ age_label: e.target.value })} placeholder="Ej: 2 Años" />
+            <input value={form.age_label} onChange={(e) => updateForm({ age_label: e.target.value })} placeholder="Edad aproximada" />
           </label>
 
           <label className="field">
@@ -631,13 +634,13 @@ export function PaginaPublicarAdopcion({ user }) {
 
           <label className="field">
             <span>Color</span>
-            <input value={form.color} onChange={(e) => updateForm({ color: e.target.value })} placeholder="Ej: Café y blanco" />
+            <input value={form.color} onChange={(e) => updateForm({ color: e.target.value })} placeholder="Color principal o combinación" />
           </label>
 
           {form.publisher_type === 'albergue' ? (
             <label className="field">
               <span>Nombre del albergue</span>
-              <input value={form.shelter_name} onChange={(e) => updateForm({ shelter_name: e.target.value })} placeholder="Ej: Refugio Patitas" />
+              <input value={form.shelter_name} onChange={(e) => updateForm({ shelter_name: e.target.value })} placeholder="Nombre del albergue o fundación" />
             </label>
           ) : null}
 
@@ -679,17 +682,17 @@ export function PaginaPublicarAdopcion({ user }) {
 
           <label className="field">
             <span>Nombre de contacto</span>
-            <input value={form.contact_name} onChange={(e) => updateForm({ contact_name: e.target.value })} placeholder="Ej: Maria" />
+            <input value={form.contact_name} onChange={(e) => updateForm({ contact_name: e.target.value })} placeholder="Nombre de la persona de contacto" />
           </label>
 
           <label className="field">
             <span>Telefono</span>
-            <input type="tel" maxLength={15} value={form.contact_phone} onChange={(e) => updateForm({ contact_phone: e.target.value })} placeholder="Ej: +56912345678" />
+            <input type="tel" maxLength={15} value={form.contact_phone} onChange={(e) => updateForm({ contact_phone: e.target.value })} placeholder="+56 9 1234 5678" />
           </label>
 
           <label className="field">
             <span>Email</span>
-            <input value={form.contact_email} onChange={(e) => updateForm({ contact_email: e.target.value })} placeholder="Ej: contacto@email.com" />
+            <input value={form.contact_email} onChange={(e) => updateForm({ contact_email: e.target.value })} placeholder="nombre@dominio.cl" />
           </label>
 
           <label className="field adoptionsFieldFull">
@@ -719,22 +722,22 @@ export function PaginaPublicarAdopcion({ user }) {
 
           <label className="field adoptionsFieldFull">
             <span>Su historia</span>
-            <textarea rows={4} value={form.description} onChange={(e) => updateForm({ description: e.target.value })} placeholder="Cuenta el caracter, energia y necesidades de la mascota" />
+            <textarea rows={4} value={form.description} onChange={(e) => updateForm({ description: e.target.value })} placeholder="Describe su personalidad, nivel de energía y necesidades" />
           </label>
 
           <label className="field adoptionsFieldFull">
             <span>Por qué lo das en adopción</span>
-            <textarea rows={4} value={form.adoption_reason} onChange={(e) => updateForm({ adoption_reason: e.target.value })} placeholder="Motivo de la adopción" />
+            <textarea rows={4} value={form.adoption_reason} onChange={(e) => updateForm({ adoption_reason: e.target.value })} placeholder="Explica brevemente el motivo de la adopción" />
           </label>
 
           <label className="field adoptionsFieldFull">
             <span>Comportamiento</span>
-            <textarea rows={3} value={form.behavior_notes} onChange={(e) => updateForm({ behavior_notes: e.target.value })} placeholder="Ej: vive en departamento, sociable, etc." />
+            <textarea rows={3} value={form.behavior_notes} onChange={(e) => updateForm({ behavior_notes: e.target.value })} placeholder="Ej.: sociable con personas, convive con otros animales" />
           </label>
 
           <label className="field adoptionsFieldFull">
             <span>Notas de salud</span>
-            <textarea rows={3} value={form.health_notes} onChange={(e) => updateForm({ health_notes: e.target.value })} placeholder="Detalles adicionales (opcional)" />
+            <textarea rows={3} value={form.health_notes} onChange={(e) => updateForm({ health_notes: e.target.value })} placeholder="Vacunas, esterilización o tratamientos vigentes" />
           </label>
 
           <div className="adoptionsFormActions adoptionsFieldFull">

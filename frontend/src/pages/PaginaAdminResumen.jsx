@@ -236,7 +236,7 @@ export default function PaginaAdminResumen() {
                         confirmReport(r.id).catch((e) => setError(e?.message || 'Error')).finally(() => setLoading(false))
                       }}
                     >
-                      Confirmar
+                      Publicar
                     </button>
                   </td>
                 </tr>

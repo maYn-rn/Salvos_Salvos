@@ -16,15 +16,34 @@ function resolverApiBase() {
 }
 
 export const API_BASE = resolverApiBase()
+export const MAX_IMAGE_UPLOAD_BYTES = 3 * 1024 * 1024
+export const MAX_IMAGE_OUTPUT_BYTES = 600_000
+export const MAX_DOCUMENT_OUTPUT_BYTES = 800_000
+export const VETERINARY_VERIFICATION_DOCUMENT_OPTIONS = [
+  { value: 'patente_comercial', label: 'Patente comercial' },
+  { value: 'inicio_actividades', label: 'Inicio de actividades' },
+  { value: 'rut_empresa', label: 'RUT empresa' },
+  { value: 'titulo_profesional', label: 'Título profesional' },
+  { value: 'certificado_sanitario', label: 'Certificado sanitario' },
+  { value: 'otro', label: 'Otro' },
+]
+const ACCESS_TOKEN_STORAGE_KEY = 'access_token'
 
 let accessToken = null
+
+if (typeof window !== 'undefined') {
+  accessToken = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY) || null
+}
 
 export function getAccessToken() {
   return accessToken
 }
 
 export function setAccessToken(token) {
-  accessToken = token
+  accessToken = token || null
+  if (typeof window === 'undefined') return
+  if (accessToken) window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, accessToken)
+  else window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
 }
 
 export const REGION_COMUNAS = [
@@ -139,25 +158,14 @@ export async function apiRequest(path, { method = 'GET', body } = {}) {
 }
 
 export async function refreshAccess() {
-  const refreshToken = localStorage.getItem('refresh_token')
-  const resp = await apiRequest(
-    '/api/auth/refresh/',
-    refreshToken
-      ? {
-          method: 'POST',
-          body: { refresh: refreshToken },
-        }
-      : {
-          method: 'POST',
-        }
-  )
+  const resp = await apiRequest('/api/auth/refresh/', { method: 'POST' })
 
   if (!resp.ok || !resp.data?.access) {
-    accessToken = null
+    setAccessToken(null)
     return false
   }
 
-  accessToken = resp.data.access
+  setAccessToken(resp.data.access)
   return true
 }
 
@@ -182,6 +190,18 @@ export function formatDateShort(iso) {
   return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short' }).format(d)
 }
 
+export function formatFileSize(bytes) {
+  const size = Number(bytes)
+  if (!Number.isFinite(size) || size <= 0) return '0 B'
+  if (size < 1024) return `${Math.round(size)} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export function getVeterinaryDocumentTypeLabel(value) {
+  return VETERINARY_VERIFICATION_DOCUMENT_OPTIONS.find((item) => item.value === value)?.label || 'Documento'
+}
+
 function supportsMimeType(type) {
   try {
     const canvas = document.createElement('canvas')
@@ -199,6 +219,11 @@ async function blobToDataUrl(blob) {
     reader.onload = () => resolve(String(reader.result || ''))
     reader.readAsDataURL(blob)
   })
+}
+
+export async function fileToDataUrl(file) {
+  if (!file) return ''
+  return await blobToDataUrl(file)
 }
 
 async function fileToBitmap(file) {
@@ -233,7 +258,7 @@ async function canvasToBlob(canvas, type, quality) {
 
 export async function optimizeImageFileToDataUrl(
   file,
-  { maxEdge = 1400, maxBytes = 650_000, mimePreference = 'image/webp' } = {}
+  { maxEdge = 1400, maxBytes = MAX_IMAGE_OUTPUT_BYTES, mimePreference = 'image/webp' } = {}
 ) {
   if (!file) return ''
   const chosenMime = supportsMimeType(mimePreference) ? mimePreference : 'image/jpeg'
