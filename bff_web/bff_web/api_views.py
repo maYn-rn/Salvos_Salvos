@@ -128,7 +128,7 @@ def auth_refresh(request):
     if not refresh:
         return JsonResponse({'detail': 'missing_refresh_cookie'}, status=401)
 
-    url = f'{settings.SECURITY_SERVICE_BASE_URL}/api/auth/refresh'
+    url = f'{settings.SECURITY_SERVICE_BASE_URL}/api/auth/refresh/'
     data = json.dumps({'refresh': refresh}, separators=(',', ':')).encode('utf-8')
     req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'}, method='POST')
 
@@ -169,7 +169,7 @@ def auth_logout(request):
 
     refresh = request.COOKIES.get('refresh_token')
     if refresh:
-        url = f'{settings.SECURITY_SERVICE_BASE_URL}/api/auth/logout'
+        url = f'{settings.SECURITY_SERVICE_BASE_URL}/api/auth/logout/'
         data = json.dumps({'refresh': refresh}, separators=(',', ':')).encode('utf-8')
         req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'}, method='POST')
         try:
