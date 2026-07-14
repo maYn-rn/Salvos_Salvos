@@ -10,11 +10,11 @@ export ADOPTIONS_SERVICE_BASE_URL="${ADOPTIONS_SERVICE_BASE_URL:-http://127.0.0.
 export ARCHIVOS_SERVICE_BASE_URL="${ARCHIVOS_SERVICE_BASE_URL:-http://127.0.0.1:8004}"
 
 echo "Aplicando migraciones..."
-python "$ROOT_DIR/ms_seguridad/manage.py" migrate
-python "$ROOT_DIR/ms_mascotas/manage.py" migrate
-python "$ROOT_DIR/ms_adopciones/manage.py" migrate
-python "$ROOT_DIR/ms_archivos/manage.py" migrate
-python "$ROOT_DIR/bff_web/manage.py" migrate
+python "$ROOT_DIR/ms_seguridad/manage.py" migrate --noinput
+python "$ROOT_DIR/ms_mascotas/manage.py" migrate --noinput
+python "$ROOT_DIR/ms_adopciones/manage.py" migrate --noinput
+python "$ROOT_DIR/ms_archivos/manage.py" migrate --noinput
+python "$ROOT_DIR/bff_web/manage.py" migrate --noinput
 
 echo "Levantando microservicios internos..."
 python "$ROOT_DIR/ms_seguridad/manage.py" runserver 127.0.0.1:8002 --noreload &
