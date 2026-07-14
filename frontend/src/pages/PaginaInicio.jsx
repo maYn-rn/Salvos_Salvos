@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import CarruselReportesRecientes from '../components/CarruselReportesRecientes'
+import AlertasRecientesCerca from '../components/AlertasRecientesCerca'
 
 function toFiniteInt(value) {
   const n = Number(value)
@@ -242,7 +242,7 @@ export default function PaginaInicio({
           </div>
 
           <section id="reportes" className="section">
-            <CarruselReportesRecientes title="Reportes recientes cerca de ti" reports={nearbyRecentReports} user={user} onCardClick={onViewDetail} />
+            <AlertasRecientesCerca title="Alertas recientes cerca de ti" reports={nearbyRecentReports} onCardClick={onViewDetail} />
           </section>
         </>
       )}
