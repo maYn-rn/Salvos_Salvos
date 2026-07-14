@@ -1569,6 +1569,10 @@ a {
   margin: 0 auto;
 }
 
+.authCardLogin {
+  max-width: 640px;
+}
+
 .authHeader {
   display: grid;
   justify-items: center;
@@ -1606,6 +1610,37 @@ a {
 .form {
   display: grid;
   gap: 12px;
+}
+
+.authFormCompact {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.authAuxRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 15px;
+  font-size: 0.9em;
+}
+
+.authRemember {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.authRemember input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+}
+
+.authFooterLink {
+  max-width: 520px;
+  margin: 15px auto 0;
 }
 
 .registerForm {
@@ -1683,6 +1718,20 @@ a {
 
   .registerFormFull {
     grid-column: auto;
+  }
+
+  .authCardLogin {
+    max-width: 100%;
+  }
+
+  .authFormCompact,
+  .authFooterLink {
+    max-width: 100%;
+  }
+
+  .authAuxRow {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

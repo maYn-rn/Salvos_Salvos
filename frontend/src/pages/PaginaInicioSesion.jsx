@@ -14,7 +14,7 @@ export default function PaginaInicioSesion({ error, busy, authForm, onAuthFormCh
 
   return (
     <div className="mainInner">
-      <section className="card authCard">
+      <section className="card authCard authCardLogin">
         <div className="authHeader">
           <img className="authHeaderLogo" src="/logo_nuevo_sys.png" alt="" />
           <div className="authHeaderTitle">Bienvenido de vuelta</div>
@@ -24,7 +24,7 @@ export default function PaginaInicioSesion({ error, busy, authForm, onAuthFormCh
         {/* Muestra el error que viene del backend (ej: Credenciales inválidas) */}
         {error ? <div className="formError" style={{ color: 'red', marginBottom: '10px' }}>{error}</div> : null}
         
-        <form className="form" onSubmit={handleSubmitLocal}>
+        <form className="form authFormCompact" onSubmit={handleSubmitLocal}>
           <label className="field">
             <span>Usuario</span>
             <div className="fieldControl">
@@ -65,13 +65,12 @@ export default function PaginaInicioSesion({ error, busy, authForm, onAuthFormCh
           </label>
 
           {/* Opciones adicionales: Recordarme y Olvidé mi contraseña */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', fontSize: '0.9em' }}>
-            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+          <div className="authAuxRow">
+            <label className="authRemember">
               <input 
                 type="checkbox" 
                 checked={recordarme}
                 onChange={(e) => setRecordarme(e.target.checked)}
-                style={{ marginRight: '5px' }} 
               />
               Recordarme
             </label>
@@ -85,7 +84,7 @@ export default function PaginaInicioSesion({ error, busy, authForm, onAuthFormCh
           </button>
         </form>
         
-        <div className="mutedText" style={{ marginTop: '15px' }}>
+        <div className="mutedText authFooterLink">
           ¿No tienes cuenta? <Link to={`/register${locationSearch || ''}`} onClick={onSwitchToRegister}>Regístrate</Link>
         </div>
       </section>

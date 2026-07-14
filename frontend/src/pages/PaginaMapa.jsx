@@ -238,11 +238,12 @@ export default function PaginaMapa({ center, zoom, reports, lastCreatedReportId,
   }, [reports, search, status, species, region, comuna])
 
   const activeRegionView = region ? REGION_VIEW[region] || null : null
+  const hasActiveFilters = Boolean(search.trim() || status !== 'todos' || species !== 'todos' || region || comuna)
   const firstFilteredWithCoords = filteredReports.find((report) => report?.latitude != null && report?.longitude != null)
-  const mapCenter = firstFilteredWithCoords
+  const mapCenter = hasActiveFilters && firstFilteredWithCoords
     ? [Number(firstFilteredWithCoords.latitude), Number(firstFilteredWithCoords.longitude)]
     : (activeRegionView ? activeRegionView.center : center)
-  const mapZoom = firstFilteredWithCoords ? 13 : (activeRegionView ? activeRegionView.zoom : zoom)
+  const mapZoom = hasActiveFilters && firstFilteredWithCoords ? 13 : (activeRegionView ? activeRegionView.zoom : zoom)
 
   function resetFilters() {
     setSearch('')

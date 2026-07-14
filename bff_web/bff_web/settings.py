@@ -36,6 +36,18 @@ def load_env_file(env_path):
         os.environ.setdefault(key, value)
 
 
+def env_bool(name, default=False):
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {'1', 'true', 'yes', 'si', 'sí', 'on'}
+
+
+def env_list(name, default=''):
+    raw_value = os.environ.get(name, default)
+    return [item.strip() for item in raw_value.split(',') if item.strip()]
+
+
 def build_database_config(service_prefix):
     if (os.environ.get('FORZAR_SQLITE') or '').strip().lower() in {'1', 'true', 'yes', 'si', 'sí'}:
         return {
@@ -79,12 +91,12 @@ for candidate in (PROJECT_ROOT / '.env', BASE_DIR / '.env'):
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-l(tmh+-!j#3fs)&un2feoba#y7$-l%&00aj-f^q!+(&b^(6l4y'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-l(tmh+-!j#3fs)&un2feoba#y7$-l%&00aj-f^q!+(&b^(6l4y')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env_bool('DEBUG', True)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 
 
 # Application definition
@@ -174,6 +186,8 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
 
 # Corrección de puertos:
 SECURITY_SERVICE_BASE_URL = os.environ.get('SECURITY_SERVICE_BASE_URL', 'http://127.0.0.1:8002')
@@ -181,14 +195,16 @@ MASCOTAS_SERVICE_BASE_URL = os.environ.get('MASCOTAS_SERVICE_BASE_URL', 'http://
 ADOPTIONS_SERVICE_BASE_URL = os.environ.get('ADOPTIONS_SERVICE_BASE_URL', 'http://127.0.0.1:8003')
 ARCHIVOS_SERVICE_BASE_URL = os.environ.get('ARCHIVOS_SERVICE_BASE_URL', 'http://127.0.0.1:8004')
 
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get(
-        'CORS_ALLOWED_ORIGINS',
-        'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000',
-    ).split(',')
-    if origin.strip()
-]
+CORS_ALLOWED_ORIGINS = env_list(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000',
+)
+CSRF_TRUSTED_ORIGINS = env_list(
+    'CSRF_TRUSTED_ORIGINS',
+    'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000',
+)
+SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', not DEBUG)
+CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', not DEBUG)
 
 REFRESH_COOKIE_SECURE = os.environ.get('REFRESH_COOKIE_SECURE', '')
 REFRESH_COOKIE_SAMESITE = os.environ.get('REFRESH_COOKIE_SAMESITE', '')

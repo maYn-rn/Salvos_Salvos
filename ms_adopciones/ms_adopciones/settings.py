@@ -27,6 +27,18 @@ def load_env_file(env_path):
         os.environ.setdefault(key, value)
 
 
+def env_bool(name, default=False):
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {'1', 'true', 'yes', 'si', 'sí', 'on'}
+
+
+def env_list(name, default=''):
+    raw_value = os.environ.get(name, default)
+    return [item.strip() for item in raw_value.split(',') if item.strip()]
+
+
 def build_database_config(service_prefix):
     if (os.environ.get('FORZAR_SQLITE') or '').strip().lower() in {'1', 'true', 'yes', 'si', 'sí'}:
         return {
@@ -65,11 +77,11 @@ def build_database_config(service_prefix):
 for candidate in (PROJECT_ROOT / '.env', BASE_DIR / '.env'):
     load_env_file(candidate)
 
-SECRET_KEY = 'django-insecure-ms-adopciones-dev-key-change-me'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-ms-adopciones-dev-key-change-me')
 
-DEBUG = True
+DEBUG = env_bool('DEBUG', True)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -129,5 +141,7 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'dev-jwt-secret-change-me')

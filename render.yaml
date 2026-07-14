@@ -1,0 +1,125 @@
+services:
+  - type: web
+    name: sanos-y-salvos-ms-seguridad
+    env: python
+    plan: free
+    rootDir: ms_seguridad
+    buildCommand: pip install -r ../requirements.txt
+    startCommand: python manage.py migrate && gunicorn ms_seguridad.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        sync: false
+
+  - type: web
+    name: sanos-y-salvos-ms-mascotas
+    env: python
+    plan: free
+    rootDir: ms_mascotas
+    buildCommand: pip install -r ../requirements.txt
+    startCommand: python manage.py migrate && gunicorn ms_mascotas.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        sync: false
+
+  - type: web
+    name: sanos-y-salvos-ms-adopciones
+    env: python
+    plan: free
+    rootDir: ms_adopciones
+    buildCommand: pip install -r ../requirements.txt
+    startCommand: python manage.py migrate && gunicorn ms_adopciones.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        sync: false
+
+  - type: web
+    name: sanos-y-salvos-ms-archivos
+    env: python
+    plan: free
+    rootDir: ms_archivos
+    buildCommand: pip install -r ../requirements.txt
+    startCommand: python manage.py migrate && gunicorn ms_archivos.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        sync: false
+
+  - type: web
+    name: sanos-y-salvos-bff
+    env: python
+    plan: free
+    rootDir: bff_web
+    buildCommand: pip install -r ../requirements.txt
+    startCommand: python manage.py migrate && gunicorn bff_web.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: SESSION_COOKIE_SECURE
+        value: "True"
+      - key: CSRF_COOKIE_SECURE
+        value: "True"
+      - key: REFRESH_COOKIE_SECURE
+        value: "True"
+      - key: REFRESH_COOKIE_SAMESITE
+        value: None
+      - key: SECURITY_SERVICE_BASE_URL
+        sync: false
+      - key: MASCOTAS_SERVICE_BASE_URL
+        sync: false
+      - key: ADOPTIONS_SERVICE_BASE_URL
+        sync: false
+      - key: ARCHIVOS_SERVICE_BASE_URL
+        sync: false
