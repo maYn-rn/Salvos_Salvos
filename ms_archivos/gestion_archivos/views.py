@@ -6,9 +6,12 @@ import json
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import quote
 
+import requests
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
+from django.shortcuts import redirect
 from django.views.decorators.csrf import csrf_exempt
 
 from .models import Archivo
@@ -82,11 +85,43 @@ def _normalizar_texto(valor, predeterminado=''):
     return (valor or predeterminado or '').strip()
 
 
-def _construir_url_descarga(request, archivo_id: int) -> str:
-    return request.build_absolute_uri(f'/api/archivos/{archivo_id}/descargar/')
+def _supabase_habilitado() -> bool:
+    return bool(
+        getattr(settings, 'SUPABASE_URL', '')
+        and getattr(settings, 'SUPABASE_SERVICE_ROLE_KEY', '')
+        and getattr(settings, 'SUPABASE_STORAGE_BUCKET', '')
+    )
+
+
+def _supabase_public_url(ruta_relativa: str) -> str:
+    base = str(getattr(settings, 'SUPABASE_URL', '') or '').rstrip('/')
+    bucket = str(getattr(settings, 'SUPABASE_STORAGE_BUCKET', '') or '').strip()
+    ruta = quote(ruta_relativa.lstrip('/'), safe='/')
+    return f'{base}/storage/v1/object/public/{bucket}/{ruta}'
+
+
+def _supabase_subir_archivo(ruta_relativa: str, contenido: bytes, tipo_mime: str):
+    base = str(getattr(settings, 'SUPABASE_URL', '') or '').rstrip('/')
+    bucket = str(getattr(settings, 'SUPABASE_STORAGE_BUCKET', '') or '').strip()
+    token = str(getattr(settings, 'SUPABASE_SERVICE_ROLE_KEY', '') or '').strip()
+    ruta = quote(ruta_relativa.lstrip('/'), safe='/')
+    url = f'{base}/storage/v1/object/{bucket}/{ruta}'
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'apikey': token,
+        'Content-Type': tipo_mime,
+        'x-upsert': 'true',
+    }
+    resp = requests.post(url, headers=headers, data=contenido, timeout=20)
+    if resp.status_code < 200 or resp.status_code >= 300:
+        raise RuntimeError('supabase_upload_failed')
 
 
 def _archivo_a_dict(archivo: Archivo, request) -> dict:
+    if _supabase_habilitado() and bool(getattr(settings, 'SUPABASE_STORAGE_PUBLIC', True)):
+        url_descarga = _supabase_public_url(archivo.ruta_relativa)
+    else:
+        url_descarga = request.build_absolute_uri(f'/api/archivos/{archivo.id}/descargar/')
     return {
         'id': archivo.id,
         'nombre_original': archivo.nombre_original,
@@ -104,7 +139,7 @@ def _archivo_a_dict(archivo: Archivo, request) -> dict:
         'activo': archivo.activo,
         'creado_en': archivo.creado_en.isoformat(),
         'actualizado_en': archivo.actualizado_en.isoformat(),
-        'url_descarga': _construir_url_descarga(request, archivo.id),
+        'url_descarga': url_descarga,
     }
 
 
@@ -157,11 +192,15 @@ def _guardar_archivo(contenido: bytes, tipo_mime: str, tipo_entidad: str, id_ent
     extension = TIPOS_MIME_PERMITIDOS[tipo_mime]
     nombre_guardado = f'{uuid.uuid4().hex}{extension}'
     directorio_relativo = Path(tipo_entidad) / str(id_entidad)
+    ruta_relativa = str(directorio_relativo / nombre_guardado).replace('\\', '/')
+    if _supabase_habilitado():
+        _supabase_subir_archivo(ruta_relativa, contenido, tipo_mime)
+        return nombre_guardado, ruta_relativa, extension
     directorio_absoluto = Path(settings.RUTA_BASE_ARCHIVOS) / directorio_relativo
     _asegurar_directorio(directorio_absoluto)
     ruta_absoluta = directorio_absoluto / nombre_guardado
     ruta_absoluta.write_bytes(contenido)
-    return nombre_guardado, str(directorio_relativo / nombre_guardado).replace('\\', '/'), extension
+    return nombre_guardado, ruta_relativa, extension
 
 
 def _ruta_absoluta_desde_relativa(ruta_relativa: str) -> Path:
@@ -284,7 +323,10 @@ def archivos(request):
         if error_limites:
             return error_limites
 
-        nombre_guardado, ruta_relativa, extension = _guardar_archivo(contenido, tipo_mime, tipo_entidad, id_entidad)
+        try:
+            nombre_guardado, ruta_relativa, extension = _guardar_archivo(contenido, tipo_mime, tipo_entidad, id_entidad)
+        except Exception:
+            return JsonResponse({'detail': 'storage_unavailable'}, status=502)
         archivo = Archivo.objects.create(
             nombre_original=nombre_original,
             nombre_guardado=nombre_guardado,
@@ -368,6 +410,9 @@ def archivo_descargar(request, archivo_id: int):
         archivo = Archivo.objects.get(id=archivo_id, activo=True)
     except Archivo.DoesNotExist:
         return JsonResponse({'detail': 'not_found'}, status=404)
+
+    if _supabase_habilitado() and bool(getattr(settings, 'SUPABASE_STORAGE_PUBLIC', True)):
+        return redirect(_supabase_public_url(archivo.ruta_relativa))
 
     ruta_absoluta = _ruta_absoluta_desde_relativa(archivo.ruta_relativa)
     if not ruta_absoluta.exists() or not ruta_absoluta.is_file():

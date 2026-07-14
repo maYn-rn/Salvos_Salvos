@@ -148,3 +148,8 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'dev-jwt-secret-change-me')
 RUTA_BASE_ARCHIVOS = BASE_DIR / 'archivos_subidos'
 LIMITE_TAMANO_ARCHIVO_BYTES = int(os.environ.get('LIMITE_TAMANO_ARCHIVO_BYTES', '5242880'))
 MAXIMO_ARCHIVOS_POR_ENTIDAD = int(os.environ.get('MAXIMO_ARCHIVOS_POR_ENTIDAD', '3'))
+
+SUPABASE_URL = (os.environ.get('SUPABASE_URL') or '').strip()
+SUPABASE_SERVICE_ROLE_KEY = (os.environ.get('SUPABASE_SERVICE_ROLE_KEY') or '').strip()
+SUPABASE_STORAGE_BUCKET = (os.environ.get('SUPABASE_STORAGE_BUCKET') or '').strip()
+SUPABASE_STORAGE_PUBLIC = env_bool('SUPABASE_STORAGE_PUBLIC', True)
